@@ -9,8 +9,13 @@
 #include <thread>
 
 #include "execute.h"
-#include "view.h"
 #include "ppu.h"
+#ifdef MAC
+	#include "view.h"
+#endif
+#ifdef PI
+	#include "piView.h"
+#endif
 
 extern bool debug;
 
