@@ -1,0 +1,2 @@
+nintendulator.o: nintendulator.cpp
+	g++ -std=c++11 -stdlib=libc++ -I /usr/local/include/SDL2 -l GLEW -l SDL2 -l SDL2main -framework openGL nintendulator.cpp execute.cpp instructions.cpp ppu.cpp view.cpp -o nintendulator.out
