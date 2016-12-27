@@ -4,8 +4,8 @@
 #include <iostream>
 #include "VG/openvg.h"
 #include "VG/vgu.h"
-#include "fontinfo.h"
-#include "shapes.h"
+#include <fontinfo.h>
+#include <shapes.h>
 
 #include "ppu.h"
 
