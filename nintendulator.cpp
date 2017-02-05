@@ -1,36 +1,14 @@
 #include "nintendulator.h"
 
 bool debug;
+bool test;
 
-unsigned short programRomPageCount;
-unsigned short characterRomPageCount;
-unsigned char flags1;
-unsigned char flags2;
-unsigned short mapper;
-unsigned char submapperNumber;
-bool fourScreenMode;
-bool trainer;
-bool batteryBackedRam;
-bool mirroring;
-bool nes2Mode;
-bool playchoice10;
-bool vsUnisystem;
-
-unsigned short PC;
-unsigned char SP;
-unsigned char A;
-unsigned char X;
-unsigned char Y;
-unsigned char P;
-
-std::vector<unsigned char> romBytes;
-unsigned char RAM[0x0800];
-unsigned char cartRAM[0x2000];
-unsigned char programBank0;
-unsigned char programBank1;
+constexpr int cpuPeriodNanoseconds = 559;
+constexpr int framePeriodNanoseconds = 16666667;
 
 int main(int argc, char *argv[]){
 	debug = false;
+	test = false;
 	std::string filename;
 	if (argc > 1){
 		filename = argv[1];
@@ -41,6 +19,9 @@ int main(int argc, char *argv[]){
 	for (int i = 0; i < argc-2; i++){
 		if (std::string(argv[i+2]) == "-d"){
 			debug = true;
+		}
+		if (std::string(argv[i+2]) == "-t"){
+			test = true;
 		}
 	}
 
@@ -62,20 +43,20 @@ int main(int argc, char *argv[]){
 		return 0;
 	}
 
-	programRomPageCount = headerBytes[4];
-	characterRomPageCount = headerBytes[5];
-	flags1 = headerBytes[6];
-	flags2 = headerBytes[7];
+	unsigned short programRomPageCount = headerBytes[4];
+	unsigned short characterRomPageCount = headerBytes[5];
+	unsigned char flags1 = headerBytes[6];
+	unsigned char flags2 = headerBytes[7];
 
-	mapper = (flags1 >> 4) + (flags2 & 0xf0);
-	submapperNumber = 0;
-	fourScreenMode = flags1 & 0x08;
-	trainer = flags1 & 0x04;
-	batteryBackedRam = flags1 & 0x02;
-	mirroring = flags1 & 0x01;
-	nes2Mode = ((flags2 & 0x0c) == 0x08);
-	playchoice10 = flags2 & 0x02;
-	vsUnisystem = flags2 & 0x01;
+	unsigned short mapper = (flags1 >> 4) + (flags2 & 0xf0);
+	unsigned char submapperNumber = 0;
+	bool fourScreenMode = flags1 & 0x08;
+	bool trainer = flags1 & 0x04;
+	bool batteryBackedRam = flags1 & 0x02;
+	bool mirroring = flags1 & 0x01;
+	bool nes2Mode = ((flags2 & 0x0c) == 0x08);
+	bool playchoice10 = flags2 & 0x02;
+	bool vsUnisystem = flags2 & 0x01;
 
 	if (nes2Mode){
 		mapper += (headerBytes[8] & 0x0f) * 256;
@@ -94,122 +75,85 @@ int main(int argc, char *argv[]){
 		return 0;
 	}
 
+	unsigned char *cartRAM = new unsigned char[0x2000];
+	std::vector<unsigned char>* romBytes = new std::vector<unsigned char>();
 	while (inFile.get(inChar)){
-		romBytes.push_back(inChar);
+		romBytes->push_back(inChar);
 	}
 	inFile.close();
 
-	if (debug){
+	if (debug || test){
 		std::cout<< "program rom pages: " << programRomPageCount << "\n";
-		std::cout<< "program rom bytes: " << programRomPageCount*16384 << "\n";
+		std::cout<< "expected program rom bytes: " << programRomPageCount*16384 << "\n";
+		std::cout<< "program rom bytes: " << romBytes->size() << "\n";
 		std::cout<< "character rom pages: " << characterRomPageCount << "\n";
 		std::cout<< "character rom bytes: " << characterRomPageCount*16384 << "\n";
-		std::cout<< "total rom bytes: " << romBytes.size() << "\n";
-		std::cout<< "total file bytes: " << headerBytes.size()+romBytes.size() << "\n";
+		std::cout<< "total rom bytes: " << romBytes->size() << "\n";
+		std::cout<< "total file bytes: " << headerBytes.size()+romBytes->size() << "\n";
 	}
 
-	PC = 0;
-	SP = 0xff;
-	A = 0;
-	X = 0;
-	Y = 0;
-	P = 0;
-
-	programBank0 = 0;
-	programBank1 = 0;
-	if (mapper == 2){
-		programBank1 = programRomPageCount-1;
-	}
-
+	PPU* ppu = new PPU(mirroring, fourScreenMode);
+	CPU* cpu = new CPU(romBytes, cartRAM, programRomPageCount, mapper, ppu);
+	if (debug) cpu->setDebug();
 	// reset interrupt on startup
-	if (debug) std::cout<< "Reset PC to " << std::hex << (valueAt(0xfffd) << 8) + valueAt(0xfffc) << "\n";
-	PC = (valueAt(0xfffd) << 8) + valueAt(0xfffc);
+	cpu->reset();
 
-	if (!View::init()){
+	View* view = new View(ppu);
+	if (!view->init()){
 		std::cout<<"Error constructing View. Exiting";
 		return 0;
 	}
 
 	std::string dummy;
+	auto start = std::chrono::high_resolution_clock::now();
+	auto now = std::chrono::high_resolution_clock::now();
+	auto prev = std::chrono::high_resolution_clock::now();
+	int frames = 0;
 	unsigned char opcode;
 	unsigned char cycles;
 	unsigned char nextCPU = 1;
+	int masterClock = 0;
 	while (1){
-		if (--nextCPU == 0){
-			if (debug){
-				std::cout<< "*****CPU STATUS*****\n";
-				std::cout<< std::hex << "PC: " << int(PC) << ", A: " << int(A) << ", X: " << int(X) << ", Y: " << int(Y) << ", P: " << int(P) << ", SP: " << int(SP) << "\n";
-				std::cout<< "NEXT IS: " << int(valueAt(PC)) << " " << int(valueAt(PC+1)) << " " << int(valueAt(PC+2)) << " " << int(valueAt(PC+3)) << "\n";
-				std::cin>>dummy;
-			}
-
-			opcode = valueAt(PC++);
-			cycles = Execute::execute(opcode);
-			if (!debug && cycles == 0){
-				break;
-			}
+		if (--nextCPU == 0){ // cpu clock cycle
+			cycles = cpu->execute();
+			// if (!debug && cycles == 0){
+			// 	break;
+			// }
 			nextCPU = cycles;
 		}
-		if (!View::event()){
-			break;
+		if (ppu->stallCPU()) nextCPU += 513; // OAMDMA
+		for (int i = 0; i < 3; i++){ // 3 ppu cycles per cpu cycle
+			ppu->execute();
+			if (ppu->nmi()){
+				cpu->nmi();
+			}
 		}
-		View::render();
-		std::this_thread::sleep_for(std::chrono::microseconds(periodMicroseconds));
-	}
 
-	View::destroy();
+		if (++masterClock == 29868){ // 1/60 seconds worth of clock cycles
+			if (masterClock == 0) view->render();
+			if (!view->event()){
+				break;
+			}
+			frames++;
+			// sleep for the remaining time
+			bool sleep = true;
+			now = std::chrono::high_resolution_clock::now();
+			auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000000000>>>(now - prev);
+			while (elapsed.count() < framePeriodNanoseconds){
+				now = std::chrono::high_resolution_clock::now();
+				elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000000000>>>(now - prev);
+			}
+			prev = now;
+			masterClock = 0;
+		}
+	}
+	view->destroy();
+	now = std::chrono::high_resolution_clock::now();
+	std::cout<< std::dec << frames << " frames in " << (now-start).count() << " ns\n";
+
+	if (test){
+		cpu->writeRamToFile("roms/testoutput.txt");
+	}
 
 	return 0;
-}
-
-unsigned char valueAt(unsigned short address){
-	unsigned char ret = 0;
-	if (address > 0xffff){
-		std::cout<< "Cannot fetch value at address " << address << ". Invalid address." << "\n";
-	} else if (address > 0xBfff){
-		ret = romBytes[(programBank1 * 0x400) + (address-0xC000)];
-	} else if (address > 0x7fff){
-		ret = romBytes[(programBank0 * 0x400) + (address-0x8000)];
-	} else if (address > 0x5fff){
-		ret = cartRAM[address-0x6000];
-	} else if (address > 0x401f){
-		// mapper specific space
-	} else if (address > 0x3fff){
-		// get I/O register
-	} else if (address > 0x1fff){
-		ret = PPU::getReg((address-0x2000) % 0x008);
-	} else{ // address < 0x2000
-		ret = RAM[address % 0x0800];
-	}
-	return ret;
-}
-
-void setValueAt(unsigned short address, unsigned char value){
-	unsigned char ret = 0;
-	if (address > 0xffff){
-		std::cout<< "Cannot set value at address " << address << ". Invalid address." << "\n";
-	} else if (address > 0xBfff){
-		if (mapper == 2){
-			// pass
-		} else{
-			romBytes[(programBank1 * 0x400) + (address-0xC000)] = value;
-		}
-	} else if (address > 0x7fff){
-		if (mapper == 2){
-			if (debug) std::cout << "Switching to bank " << int(value & 0x07) << "\n";
-			programBank0 = value & 0x07;
-		} else{
-			romBytes[(programBank0 * 0x400) + (address-0x8000)] = value;
-		}
-	} else if (address > 0x5fff){
-		cartRAM[address-0x6000] = value;
-	} else if (address > 0x401f){
-		// mapper specific space
-	} else if (address > 0x3fff){
-		// set I/O register
-	} else if (address > 0x1fff){
-		PPU::setReg((address-0x2000) % 0x008, value);
-	} else{
-		RAM[address % 0x0800] = value;
-	}
 }

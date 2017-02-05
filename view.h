@@ -8,11 +8,25 @@
 
 #include "ppu.h"
 
-namespace View{
-	bool init();
-	void render();
-	bool event();
-	void destroy();
-}
+class View {
+	public:
+		View(PPU* ppu);
+		bool init();
+		void render();
+		bool event();
+		void destroy();
+	private:
+		PPU* ppu;
+
+		SDL_Event inputEvent;
+		SDL_Window* window;
+		SDL_GLContext context;
+		GLuint vao;
+		GLuint vbo;
+		GLuint textures[1];
+		GLuint vertexShader;
+		GLuint fragmentShader;
+		GLuint shaderProgram;
+};
 
 #endif

@@ -21,16 +21,9 @@ const GLchar* fragmentSource =
     "    outColor = texture(tex, TexCoord);"
     "}";
 
-unsigned char pixels[width*height*3];
-SDL_Event inputEvent;
-SDL_Window* window;
-SDL_GLContext context;
-GLuint vao;
-GLuint vbo;
-GLuint textures[1];
-GLuint vertexShader;
-GLuint fragmentShader;
-GLuint shaderProgram;
+View::View(PPU* ppu){
+	this->ppu = ppu;
+}
 
 bool View::init(){
 	SDL_Init(SDL_INIT_EVERYTHING);
@@ -140,7 +133,7 @@ bool View::init(){
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, textures[0]);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, ppu->getPixels());
 	glUniform1i(glGetUniformLocation(shaderProgram, "tex"), 0);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -161,7 +154,7 @@ bool View::event(){
 }
 
 void View::render(){
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, ppu->getPixels());
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 
 	SDL_GL_SwapWindow(window);
