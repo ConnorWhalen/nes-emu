@@ -276,6 +276,15 @@ unsigned char Colour::blue(unsigned char colourValue){
 				   break;
 		case 0x1c: ret = 0x8b;
 				   break;
+		case 0x20:
+		case 0x21:
+		case 0x22:
+		case 0x24:
+		case 0x30:
+		case 0x31:
+		case 0x32:
+		case 0x33:
+		case 0x34:
 		case 0x23: ret = 0xfd;
 				   break;
 		case 0x25: ret = 0xb7;

@@ -23,6 +23,7 @@ const GLchar* fragmentSource =
 
 View::View(PPU* ppu){
 	this->ppu = ppu;
+	this->quitFlag = false;
 }
 
 bool View::init(){
@@ -145,12 +146,17 @@ bool View::init(){
 }
 
 bool View::event(){
-	if (SDL_PollEvent(&inputEvent))
-	{
-		if (inputEvent.type == SDL_QUIT) return false;
-		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_ESCAPE) return false;
+	if (SDL_PollEvent(&inputEvent)){
+		if (inputEvent.type == SDL_QUIT) quitFlag = true;
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_ESCAPE) quitFlag = true;
+		return true;
+	} else{
+		return false;
 	}
-	return true;
+}
+
+bool View::quit(){
+	return quitFlag;
 }
 
 void View::render(){

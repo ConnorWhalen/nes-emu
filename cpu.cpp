@@ -84,6 +84,7 @@ void CPU::reset(){
 void CPU::nmi(){
 	setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 	setValueAt(0x100 + SP--, (PC & 0x00ff));
+	setValueAt(0x100 + SP--, P);
 	PC = (valueAt(0xfffb) << 8) + valueAt(0xfffa);
 }
 
@@ -1768,7 +1769,7 @@ unsigned char CPU::PHP(){
 ******************************************************************************/
 unsigned char CPU::PLA(){
 	if (debug) std::cout<< "PLA: ";
-	A = valueAt(0x100 + SP++);
+	A = valueAt(0x100 + ++SP);
 	return 4;
 }
 
@@ -1777,7 +1778,7 @@ unsigned char CPU::PLA(){
 ******************************************************************************/
 unsigned char CPU::PLP(){
 	if (debug) std::cout<< "PLP: ";
-	P = valueAt(0x100 + SP++);
+	P = valueAt(0x100 + ++SP);
 	return 4;
 }
 
@@ -1897,9 +1898,9 @@ unsigned char CPU::ROR(unsigned char operand){
 ******************************************************************************/
 unsigned char CPU::RTI(){
 	if (debug) std::cout<< "RTI: ";
-	P = valueAt(0x100 + SP++);
-	PC = valueAt(0x100 + SP++);
-	PC += valueAt(0x100 + SP++) << 8;
+	P = valueAt(0x100 + ++SP);
+	PC = valueAt(0x100 + ++SP);
+	PC += valueAt(0x100 + ++SP) << 8;
 	return 6;
 }
 
@@ -1908,8 +1909,8 @@ unsigned char CPU::RTI(){
 ******************************************************************************/
 unsigned char CPU::RTS(){
 	if (debug) std::cout<< "RTS: ";
-	PC = valueAt(0x100 + SP++);
-	PC += valueAt(0x100 + SP++) << 8;
+	PC = valueAt(0x100 + ++SP);
+	PC += valueAt(0x100 + ++SP) << 8;
 	return 6;
 }
 

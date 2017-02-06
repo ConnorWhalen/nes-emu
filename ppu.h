@@ -44,7 +44,7 @@ class PPU {
 		unsigned short vramAddr;
 		unsigned short tempVramAddr;
 		unsigned char fineXScroll;
-		unsigned char currentTiles[16];
+		unsigned char currentTiles[24];
 
 		bool oddFrame;
 		bool nmiOnVblankStart;
@@ -76,6 +76,7 @@ class PPU {
 		bool verticalMirroring;
 
 		void setPixel(int x, int y, unsigned char colourAddress);
+		void setPixelBlack(int x, int y);
 		void incXScroll();
 		void incYScroll();
 		void fetchNextTile();

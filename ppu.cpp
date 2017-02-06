@@ -20,7 +20,7 @@ PPU::PPU(bool mirroring, bool fourScreenMode){
 	vramAddr = 0;
 	tempVramAddr = 0;
 	fineXScroll = 0;
-	for (int i = 0; i < 16; i++) currentTiles[i] = 0;
+	for (int i = 0; i < 24; i++) currentTiles[i] = 0;
 
 	oddFrame = false;
 	nmiOnVblankStart = false;
@@ -65,13 +65,22 @@ void PPU::setPixel(int x, int y, unsigned char colourAddress){
 	if (x >= width || y >= height){
 		std::cout<< "Pixel index " << x << ", " << y << " (hex) out of range." << "\n";
 	}
-	unsigned char colourValue = PPU::ppuValueAt(0x3f00 & colourAddress);
+	unsigned char colourValue = ppuValueAt(0x3f00 + colourAddress) & 0x3f;
 	unsigned char r = Colour::red(colourValue);
 	unsigned char g = Colour::green(colourValue);
 	unsigned char b = Colour::blue(colourValue);
 	pixels[y*width*3 + x*3] = r;
 	pixels[y*width*3 + x*3 + 1] = g;
 	pixels[y*width*3 + x*3 + 2] = b;
+}
+
+void PPU::setPixelBlack(int x, int y){
+	if (x >= width || y >= height){
+		std::cout<< "Pixel index " << x << ", " << y << " (hex) out of range." << "\n";
+	}
+	pixels[y*width*3 + x*3] = 0;
+	pixels[y*width*3 + x*3 + 1] = 0;
+	pixels[y*width*3 + x*3 + 2] = 0;
 }
 
 bool PPU::nmi(){
@@ -106,11 +115,11 @@ unsigned char PPU::getReg(unsigned short address){
 		ret = PPUADDR;
 	} else if (address == 7){
 		if ((vramAddr % 0x4000) > 0x3eff){
-			ret = PPU::ppuValueAt(vramAddr);
+			ret = ppuValueAt(vramAddr);
 			// TODO: set PPUDATA to value "under" palette
 		} else{
 			ret = PPUDATA;
-			PPUDATA = PPU::ppuValueAt(vramAddr);
+			PPUDATA = ppuValueAt(vramAddr);
 		}
 		if (vramIncrement32) vramAddr += 32; else vramAddr += 1;
 	} else{
@@ -166,8 +175,8 @@ void PPU::setReg(unsigned short address, unsigned char value){
 	} else if (address == 7){
 		setPPUValueAt(vramAddr, value);
 		if ((scanline > -2 && scanline < 240) && (showBackground || showSprites)){
-			PPU::incXScroll();
-			PPU::incYScroll();
+			incXScroll();
+			incYScroll();
 		}
 		if (vramIncrement32) vramAddr += 32; else vramAddr += 1;
 	} else{
@@ -177,7 +186,7 @@ void PPU::setReg(unsigned short address, unsigned char value){
 
 void PPU::oamdma(unsigned char value, CPU* cpu){
 	for (int i = 0; i < 256; i++){
-		SPRRAM[(i+OAMADDR) % 0x100] = cpu->valueAt(value*0x100 + ((i+OAMADDR) % 0x100));
+		SPRRAM[(i+OAMADDR) % 0x100] = cpu->valueAt(value*0x100 + i);
 	}
 	stallCPUFlag = true;
 }
@@ -193,22 +202,31 @@ bool PPU::stallCPU(){
 
 void PPU::execute(){
 	if (scanline < 0){ // prerender
-		if (clockTick == 1) PPUSTATUS &= 0x1f; // clear flags
-		else if (clockTick == 256) PPU::incYScroll();
-		else if (clockTick == 257) vramAddr = (vramAddr & 0x7be0) + (tempVramAddr & 0x041f); // reset x scroll
-		else if (clockTick <= 280 && clockTick < 305) vramAddr = (vramAddr & 0x041f) + (tempVramAddr & 0x7be0); // reset y scroll
-		else if (clockTick == 321 || clockTick == 329) fetchNextTile();
-		else if (clockTick == 328 || clockTick == 336) PPU::incXScroll();
-		else if (clockTick == 339 && oddFrame) clockTick++; // Skip last tick
-
+		if (showBackground || showSprites){
+			if (clockTick == 1) PPUSTATUS &= 0x1f; // clear flags
+			else if (clockTick == 256) incYScroll();
+			else if (clockTick == 257) vramAddr = (vramAddr & 0x7be0) + (tempVramAddr & 0x041f); // reset x scroll
+			else if (clockTick >= 280 && clockTick < 305) vramAddr = (vramAddr & 0x041f) + (tempVramAddr & 0x7be0); // reset y scroll
+			else if (clockTick == 321 || clockTick == 329) fetchNextTile();
+			else if (clockTick == 328 || clockTick == 336) incXScroll();
+			else if (clockTick == 339 && oddFrame) clockTick++; // Skip last tick
+		}
 	} else if (scanline < 240){ // visible lines
-		if (clockTick == 0) clockTick = 0;// pass
-		else if (clockTick % 8 == 1 && clockTick < 256 && clockTick > 320) fetchNextTile();
-		else if (clockTick % 8 == 0 && clockTick < 256 && clockTick > 320) PPU::incXScroll();
-		else if (clockTick == 256) PPU::incYScroll();
-		else if (clockTick == 257) vramAddr = (vramAddr & 0x7be0) + (tempVramAddr & 0x041f); // reset x scroll
+		if (showBackground || showSprites){
+			if (clockTick == 0) clockTick = 0;// pass
+			else if (clockTick % 8 == 1 && (clockTick < 256 || clockTick == 321 || clockTick == 329)) fetchNextTile();
+			else if (clockTick % 8 == 0 && (clockTick < 256 || clockTick > 320)) incXScroll();
+			else if (clockTick == 256) incYScroll();
+			else if (clockTick == 257) vramAddr = (vramAddr & 0x7be0) + (tempVramAddr & 0x041f); // reset x scroll
 
-		if (clockTick < 257) PPU::setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
+			if (clockTick < 257 && clockTick > 0){
+				if (showBackground){
+					setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
+				} else{
+					setPixelBlack(clockTick-1, scanline);
+				}
+			}
+		}
 	} else if (scanline < 241){ // postrender
 		// pass
 	} else if (scanline < 261){ // vblank
@@ -222,23 +240,26 @@ void PPU::execute(){
 		if (++scanline == 261){
 			scanline = -1;
 			oddFrame = !oddFrame;
+			// for (int i = 0; i < 16; i++) std::cout << int(PPU::ppuValueAt(0x3f00 + i)) << " ";
+			// std::cout << "\n";
 		}
 	}
 }
 
 void PPU::fetchNextTile(){
-	for (int i = 0; i < 8; i++) currentTiles[i] = currentTiles[i + 8];
-	unsigned char nameTableFetch = PPU::ppuValueAt((vramAddr & 0x0fff) + 0x2000);
-	unsigned char attributeTableFetch = PPU::ppuValueAt((vramAddr & 0x0c00) + ((vramAddr & 0x0380) >> 4) + ((vramAddr & 0x001c) >> 2) + 0x23c0);
-	unsigned short patternTableAddress = ((vramAddr & 0x7000) >> 12) + (nameTableFetch << 8);
+	for (int i = 0; i < 16; i++) currentTiles[i] = currentTiles[i + 8];
+	unsigned char nameTableFetch = ppuValueAt((vramAddr & 0x0fff) + 0x2000);
+	unsigned char attributeTableFetch = ppuValueAt((vramAddr & 0x0c00) + ((vramAddr & 0x0380) >> 4) + ((vramAddr & 0x001c) >> 2) + 0x23c0);
+	unsigned short patternTableAddress = ((vramAddr & 0x7000) >> 12) + (nameTableFetch << 4);
 	if (backgroundPatternTableOffset) patternTableAddress += 0x1000;
-	unsigned char patternTableLoFetch = PPU::ppuValueAt(patternTableAddress);
-	unsigned char patternTableHiFetch = PPU::ppuValueAt(patternTableAddress + 0x0008);
-	for (int i = 0; i < 8; i++) currentTiles[i + 8] = ((patternTableLoFetch >> i) & 0x1) + ((patternTableHiFetch >> (i-1)) & 0x2);
+	unsigned char patternTableLoFetch = ppuValueAt(patternTableAddress);
+	unsigned char patternTableHiFetch = ppuValueAt(patternTableAddress + 0x0008);
+	for (int i = 0; i < 8; i++) currentTiles[i + 16] = ((patternTableLoFetch >> (7-i)) & 0x1) + ((patternTableHiFetch >> (6-i)) & 0x2);
 	unsigned char attributeBitShift = 0;
 	if ((vramAddr & 0x0002) == 0x0002) attributeBitShift += 2;
 	if ((vramAddr & 0x0040) == 0x0040) attributeBitShift += 4;
-	for (int i = 0; i < 8; i++) currentTiles[i + 8] += ((attributeTableFetch >> attributeBitShift) & 0x03) << 2;
+	for (int i = 0; i < 8; i++) currentTiles[i + 16] += ((attributeTableFetch >> attributeBitShift) & 0x03) << 2;
+	// std::cout<< std::hex << patternTableAddress << " " << int(vramAddr) << " " << int(nameTableFetch) << "\n";
 }
 
 void PPU::incXScroll(){
@@ -250,11 +271,11 @@ void PPU::incXScroll(){
 }
 
 void PPU::incYScroll(){
-	if ((vramAddr & 0x7000) == 0x7000) vramAddr += 0x1000;
+	if ((vramAddr & 0x7000) != 0x7000) vramAddr += 0x1000;
 	else{
 		vramAddr -= 0x7000;
 		unsigned char y = (vramAddr & 0x03e0) >> 5;
-		if (y == 30){
+		if (y == 29){
 			y = 0;
 			vramAddr ^= 0x0800;
 		} else if (y == 31){
@@ -339,7 +360,7 @@ unsigned char PPU::ppuValueAt(unsigned short address){
 			ret = VRAM[((address-0x3f00) % 0x20) + 0x3f00];
 		}
 	} else if (address > 0x1fff){
-		ret = VRAM[((address-0x2000) % 0x1000) + 0x2000];
+		ret = nameTableValueAt(address);
 	} else{
 		ret = VRAM[address];
 	}
@@ -355,7 +376,7 @@ void PPU::setPPUValueAt(unsigned short address, unsigned char value){
 			VRAM[((address-0x3f00) % 0x20) + 0x3f00] = value;
 		}
 	} else if (address > 0x1fff){
-		VRAM[((address-0x2000) % 0x1000) + 0x2000] = value;
+		setNameTableValueAt(address, value);
 	} else{
 		VRAM[address] = value;
 	}

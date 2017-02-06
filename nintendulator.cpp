@@ -130,8 +130,11 @@ int main(int argc, char *argv[]){
 		}
 
 		if (++masterClock == 29868){ // 1/60 seconds worth of clock cycles
-			if (masterClock == 0) view->render();
-			if (!view->event()){
+			view->render();
+			while (view->event()){
+				// process all events
+			}
+			if (view->quit()){
 				break;
 			}
 			frames++;

@@ -15,8 +15,11 @@ class View {
 		void render();
 		bool event();
 		void destroy();
+		bool quit();
 	private:
 		PPU* ppu;
+
+		bool quitFlag;
 
 		SDL_Event inputEvent;
 		SDL_Window* window;
