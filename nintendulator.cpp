@@ -2,6 +2,8 @@
 
 bool debug;
 bool test;
+bool patternDump;
+bool nameDump;
 
 constexpr int cpuPeriodNanoseconds = 559;
 constexpr int framePeriodNanoseconds = 16666667;
@@ -22,6 +24,12 @@ int main(int argc, char *argv[]){
 		}
 		if (std::string(argv[i+2]) == "-t"){
 			test = true;
+		}
+		if (std::string(argv[i+2]) == "-p"){
+			patternDump = true;
+		}
+		if (std::string(argv[i+2]) == "-n"){
+			nameDump = true;
 		}
 	}
 
@@ -130,6 +138,8 @@ int main(int argc, char *argv[]){
 		}
 
 		if (++masterClock == 29868){ // 1/60 seconds worth of clock cycles
+			if (patternDump) ppu->dumpPatternTable();
+			else if (nameDump) ppu->dumpNameTable();
 			view->render();
 			while (view->event()){
 				// process all events

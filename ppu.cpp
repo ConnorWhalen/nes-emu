@@ -200,6 +200,41 @@ bool PPU::stallCPU(){
 	}
 }
 
+void PPU::dumpPatternTable(){
+	int x = 0;
+	int y = 0;
+	int tablePointer = 0;
+	for (int i = 0; i < 0x1000; i++){
+		for (int j = 0; j < 8; j++){
+			unsigned char colour = ((ppuValueAt(tablePointer) >> (7-j)) & 0x01) + ((ppuValueAt(tablePointer + 8) >> (6-j)) & 0x02);
+			setPixel(x, y, colour);
+			x++;
+		}
+		x -= 8;
+		y++;
+		if (++tablePointer % 8 == 0){
+			tablePointer += 8;
+			x += 8;
+			y -= 8;
+		}
+		if (x == 256){
+			x = 0;
+			y += 8;
+		}
+	}
+}
+
+void PPU::dumpNameTable(){
+	std::cout<< std::hex << "*****FIRST NAMETABLE*****" << "\n";
+	for (int i = 0x2000; i < 0x23c0; i++){
+		std::cout<< int(ppuValueAt(i)) << "\n";
+	}
+	std::cout<< std::hex << "*****SECOND NAMETABLE*****" << "\n";
+	for (int i = 0x2c00; i < 0x2fc0; i++){
+		std::cout<< int(ppuValueAt(i)) << "\n";
+	}
+}
+
 void PPU::execute(){
 	if (scanline < 0){ // prerender
 		if (showBackground || showSprites){
@@ -254,7 +289,8 @@ void PPU::fetchNextTile(){
 	if (backgroundPatternTableOffset) patternTableAddress += 0x1000;
 	unsigned char patternTableLoFetch = ppuValueAt(patternTableAddress);
 	unsigned char patternTableHiFetch = ppuValueAt(patternTableAddress + 0x0008);
-	for (int i = 0; i < 8; i++) currentTiles[i + 16] = ((patternTableLoFetch >> (7-i)) & 0x1) + ((patternTableHiFetch >> (6-i)) & 0x2);
+	for (int i = 0; i < 7; i++) currentTiles[i + 16] = ((patternTableLoFetch >> (7-i)) & 0x1) + ((patternTableHiFetch >> (6-i)) & 0x2);
+	currentTiles[23] = (patternTableLoFetch & 0x1) + ((patternTableHiFetch << 1) & 0x2); // shifting by a negative number results in undefined behaviour
 	unsigned char attributeBitShift = 0;
 	if ((vramAddr & 0x0002) == 0x0002) attributeBitShift += 2;
 	if ((vramAddr & 0x0040) == 0x0040) attributeBitShift += 4;
@@ -320,6 +356,7 @@ unsigned char PPU::nameTableValueAt(unsigned short address){
 }
 
 void PPU::setNameTableValueAt(unsigned short address, unsigned char value){
+	// std::cout << std::hex << "Nametable Write: " << int(value) << " " << int(address) << "\n";
 	unsigned char tableNumber = 0;
 	if (address > 0x2fff){
 		std::cout<< "Invalid Nametable address " << address << "\n";

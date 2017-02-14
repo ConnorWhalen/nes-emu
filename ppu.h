@@ -2,8 +2,6 @@
 #define PPU_H
 
 #include <iostream>
-#include <thread>
-#include <chrono>
 
 #include "cpu.h"
 #include "colour.h"
@@ -23,6 +21,8 @@ class PPU {
 		void execute();
 		void oamdma(unsigned char value, CPU* cpu);
 		unsigned char* getPixels();
+		void dumpPatternTable();
+		void dumpNameTable();
 
 	private:
 		unsigned char* pixels;

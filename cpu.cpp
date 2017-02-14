@@ -639,11 +639,11 @@ unsigned short CPU::_ZP(){
 }
 unsigned short CPU::_ZPX(){
 	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + X % 0x100)) << " from address " << int(valueAt(PC) + X % 0x100) << "\n";
-	return valueAt(PC++) + X % 0x100;
+	return (valueAt(PC++) + X) % 0x100;
 }
 unsigned short CPU::_ZPY(){
 	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + Y % 0x100)) << " from address " << int(valueAt(PC) + Y % 0x100) << "\n";
-	return valueAt(PC++) + Y % 0x100;
+	return (valueAt(PC++) + Y) % 0x100;
 }
 unsigned short CPU::_AB(){
 	unsigned short ret = valueAt(PC) + (valueAt(PC+1) << 8);
@@ -2139,12 +2139,12 @@ unsigned char CPU::STA_ABY(){
 }
 unsigned char CPU::STA_INX(){
 	if (debug) std::cout<< "STA_INX: ";
-	SBC(_INX());
+	STA(_INX());
 	return 6;
 }
 unsigned char CPU::STA_INY(){
 	if (debug) std::cout<< "STA_INY: ";
-	SBC(_INY());
+	STA(_INY());
 	return 6;
 }
 void CPU::STA(unsigned short operand){
@@ -2156,17 +2156,17 @@ void CPU::STA(unsigned short operand){
 ******************************************************************************/
 unsigned char CPU::STX_ZP(){
 	if (debug) std::cout<< "STX_ZP: ";
-	STA(_ZP());
+	STX(_ZP());
 	return 3;
 }
 unsigned char CPU::STX_ZPY(){
 	if (debug) std::cout<< "STX_ZPY: ";
-	STA(_ZPY());
+	STX(_ZPY());
 	return 4;
 }
 unsigned char CPU::STX_AB(){
 	if (debug) std::cout<< "STX_AB: ";
-	STA(_AB());
+	STX(_AB());
 	return 4;
 }
 void CPU::STX(unsigned short operand){
@@ -2178,17 +2178,17 @@ void CPU::STX(unsigned short operand){
 ******************************************************************************/
 unsigned char CPU::STY_ZP(){
 	if (debug) std::cout<< "STY_ZP: ";
-	STA(_ZP());
+	STY(_ZP());
 	return 3;
 }
 unsigned char CPU::STY_ZPX(){
 	if (debug) std::cout<< "STY_ZPX: ";
-	STA(_ZPX());
+	STY(_ZPX());
 	return 4;
 }
 unsigned char CPU::STY_AB(){
 	if (debug) std::cout<< "STY_AB: ";
-	STA(_AB());
+	STY(_AB());
 	return 4;
 }
 void CPU::STY(unsigned short operand){
