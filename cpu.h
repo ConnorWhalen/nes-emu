@@ -7,6 +7,7 @@
 #include <string>
 
 #include "ppu.h"
+#include "controller.h"
 
 class PPU;
 
@@ -22,7 +23,8 @@ class CPU {
 		static constexpr unsigned char overflowMask = 0x40;
 		static constexpr unsigned char negativeMask = 0x80;
 
-		CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned short programBankCount, unsigned short mapper, PPU* ppu);
+		CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned short programBankCount,
+			unsigned short mapper, PPU* ppu, Controller* player1, Controller* player2);
 		void reset();
 		void nmi();
 		void setDebug();
@@ -48,6 +50,8 @@ class CPU {
 		unsigned short mapper;
 
 		PPU* ppu;
+		Controller* player1;
+		Controller* player2;
 
 		bool debug;
 

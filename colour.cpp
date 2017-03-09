@@ -1,5 +1,34 @@
 #include "colour.h"
 
+void Colour::tint(unsigned char& r, unsigned char& g, unsigned char& b, bool red, bool green, bool blue){
+	if (red && green && blue){
+		r *= 0.7;
+		g *= 0.7;
+		b *= 0.7;
+	} else if (red && green && !blue){
+		r *= 0.85;
+		g *= 0.85;
+		b *= 0.7;
+	} else if (red && !green && blue){
+		r *= 0.85;
+		g *= 0.7;
+		b *= 0.85;
+	} else if (!red && green && blue){
+		r *= 0.7;
+		g *= 0.85;
+		b *= 0.85;
+	} else if (red && !green && !blue){
+		g *= 0.85;
+		b *= 0.85;
+	} else if (!red && green && !blue){
+		r *= 0.85;
+		b *= 0.85;
+	} else if (!red && !green && blue){
+		r *= 0.85;
+		g *= 0.85;
+	}
+}
+
 unsigned char Colour::red(unsigned char colourValue){
 	unsigned char ret = 0;
 	switch(colourValue) {

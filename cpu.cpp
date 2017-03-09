@@ -14,6 +14,8 @@ unsigned char CPU::valueAt(unsigned short address){
 		// mapper specific space
 	} else if (address > 0x3fff){
 		// get I/O register
+		if (address == 0x4016) ret = player1->read();
+		if (address == 0x4017) ret = player2->read();
 	} else if (address > 0x1fff){
 		ret = ppu->getReg((address-0x2000) % 0x008);
 	} else{ // address < 0x2000
@@ -45,8 +47,10 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 	} else if (address > 0x401f){
 		// mapper specific space
 	} else if (address > 0x3fff){
-		if (address == 0x4014) ppu->oamdma(value, this);
 		// set I/O register
+		if (address == 0x4014) ppu->oamdma(value, this);
+		else if (address == 0x4016) player1->write((value & 0x01) == 0x01);
+		else if (address == 0x4017) player2->write((value & 0x01) == 0x01);
 	} else if (address > 0x1fff){
 		ppu->setReg((address-0x2000) % 0x008, value);
 	} else{ // address < 0x2000
@@ -54,7 +58,8 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 	}
 }
 
-CPU::CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned short programBankCount, unsigned short mapper, PPU* ppu){
+CPU::CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned short programBankCount,
+		 unsigned short mapper, PPU* ppu, Controller* player1, Controller* player2){
 	PC = 0;
 	SP = 0xff;
 	A = 0;
@@ -74,6 +79,8 @@ CPU::CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned 
 	}
 	this->debug = false;
 	this->ppu = ppu;
+	this->player1 = player1;
+	this->player2 = player2;
 }
 
 void CPU::reset(){
@@ -82,6 +89,7 @@ void CPU::reset(){
 }
 
 void CPU::nmi(){
+	std::cout<< "Starting NMI\n";
 	setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 	setValueAt(0x100 + SP--, (PC & 0x00ff));
 	setValueAt(0x100 + SP--, P);
@@ -121,17 +129,18 @@ void CPU::writeRamToFile(std::string filename){
 * ACC - accumulator
 */
 unsigned char CPU::execute(){
-	if (debug){
+	if (debug && PC != 0xc02b && PC != 0xc02d){
 		std::cout<< "*****CPU STATUS*****\n";
 		std::cout<< std::hex << "PC: " << int(PC) << ", A: " << int(A) << ", X: " << int(X) << ", Y: " << int(Y) << ", P: " << int(P) << ", SP: " << int(SP) << "\n";
 		std::cout<< "NEXT IS: " << int(valueAt(PC)) << " " << int(valueAt(PC+1)) << " " << int(valueAt(PC+2)) << " " << int(valueAt(PC+3)) << "\n";
 		// std::cin>>dummy;
 		// std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
+	if (PC == 0xd582) std::cout << "NMI Complete\n";
 
 	unsigned char opcode = valueAt(PC++);
 	int cycles = 1;
-	switch(opcode) {
+	switch (opcode) {
 		// ADC - Add With Carry
 		case 0x69: cycles = ADC_IM();
 				   break;
@@ -976,7 +985,6 @@ unsigned char CPU::BRK(){
 		setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 		setValueAt(0x100 + SP--, (PC & 0x00ff));
 		setValueAt(0x100 + SP--, P);
-		P |= interruptDisableMask;
 		P |= breakMask;
 		PC = valueAt(0xfffe) + (valueAt(0xffff) << 8);
 	}
@@ -1468,9 +1476,9 @@ unsigned char CPU::JMP_IN(){
 	if (debug) std::cout<< "JMP_IN: ";
 	unsigned short addr = _AB();
 	if ((addr & 0x00ff) == 0x00ff){
-		addr = valueAt(addr) + (valueAt(addr-0xff) << 8);
+		addr = (valueAt(addr) << 8) + valueAt(addr-0xff);
 	} else{
-		addr = valueAt(addr) + (valueAt(addr+1) << 8);
+		addr = (valueAt(addr) << 8) + valueAt(addr+1);
 	}
 	JMP(addr);
 	return 5;
@@ -1647,25 +1655,30 @@ void CPU::LDY(unsigned char operand){
 * LSR - Logical Shift Right
 ******************************************************************************/
 unsigned char CPU::LSR_ACC(){
+	if (debug) std::cout<< "LSR_ACC: ";
 	A = LSR(A);
 	return 2;
 }
 unsigned char CPU::LSR_ZP(){
+	if (debug) std::cout<< "LSR_ZP: ";
 	unsigned short addr = _ZP();
 	setValueAt(addr, LSR(valueAt(addr)));
 	return 5;
 }
 unsigned char CPU::LSR_ZPX(){
+	if (debug) std::cout<< "LSR_ZPX: ";
 	unsigned short addr = _ZPX();
 	setValueAt(addr, LSR(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::LSR_AB(){
+	if (debug) std::cout<< "LSR_AB: ";
 	unsigned short addr = _AB();
 	setValueAt(addr, LSR(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::LSR_ABX(){
+	if (debug) std::cout<< "LSR_ABX: ";
 	unsigned short addr = _ABX();
 	setValueAt(addr, LSR(valueAt(addr)));
 	return 7;

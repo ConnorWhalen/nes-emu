@@ -29,6 +29,8 @@ class PPU {
 		unsigned char* VRAM;
 		unsigned char* SPRRAM;
 		unsigned char* secondarySPRRAM;
+		unsigned char* currentSprites;
+		unsigned char* spriteTiles;
 		unsigned char* nameTable0;
 		unsigned char* nameTable1;
 
@@ -70,16 +72,25 @@ class PPU {
 		int scanline;
 		int fineScrollX;
 		int fineScrollY;
+		unsigned char spriteCount;
+		bool hasSpriteZero;
 
 		bool nmiFlag;
 		bool singleSceenMirroring;
 		bool verticalMirroring;
 
 		void setPixel(int x, int y, unsigned char colourAddress);
-		void setPixelBlack(int x, int y);
+		void setPixelTransparent(int x, int y);
 		void incXScroll();
 		void incYScroll();
 		void fetchNextTile();
+		void fetchNextSprites();
+		void evaluateSprites();
+		bool spriteHere(unsigned char x);
+		bool spritePriority(unsigned char x);
+		bool backgroundTransparent(unsigned char x);
+		void drawSprite(unsigned char x);
+		void spriteZero();
 		unsigned char nameTableValueAt(unsigned short address);
 		void setNameTableValueAt(unsigned short address, unsigned char value);
 		unsigned char ppuValueAt(unsigned short address);

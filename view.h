@@ -7,10 +7,11 @@
 #include <iostream>
 
 #include "ppu.h"
+#include "controller.h"
 
 class View {
 	public:
-		View(PPU* ppu);
+		View(PPU* ppu, Controller* player1, Controller* player2);
 		bool init();
 		void render();
 		bool event();
@@ -18,6 +19,8 @@ class View {
 		bool quit();
 	private:
 		PPU* ppu;
+		Controller* player1;
+		Controller* player2;
 
 		bool quitFlag;
 

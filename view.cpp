@@ -21,8 +21,10 @@ const GLchar* fragmentSource =
     "    outColor = texture(tex, TexCoord);"
     "}";
 
-View::View(PPU* ppu){
+View::View(PPU* ppu, Controller* player1, Controller* player2){
 	this->ppu = ppu;
+	this->player1 = player1;
+	this->player2 = player2;
 	this->quitFlag = false;
 }
 
@@ -149,6 +151,22 @@ bool View::event(){
 	if (SDL_PollEvent(&inputEvent)){
 		if (inputEvent.type == SDL_QUIT) quitFlag = true;
 		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_ESCAPE) quitFlag = true;
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_l) player1->setA(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_k) player1->setB(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_QUOTE) player1->setSelect(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_RETURN) player1->setStart(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_w) player1->setUp(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_s) player1->setDown(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_a) player1->setLeft(false);
+		else if (inputEvent.type == SDL_KEYUP && inputEvent.key.keysym.sym == SDLK_d) player1->setRight(false);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_l) player1->setA(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_k) player1->setB(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_QUOTE) player1->setSelect(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_RETURN) player1->setStart(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_w) player1->setUp(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_s) player1->setDown(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_a) player1->setLeft(true);
+		else if (inputEvent.type == SDL_KEYDOWN && inputEvent.key.keysym.sym == SDLK_d) player1->setRight(true);
 		return true;
 	} else{
 		return false;

@@ -100,13 +100,15 @@ int main(int argc, char *argv[]){
 		std::cout<< "total file bytes: " << headerBytes.size()+romBytes->size() << "\n";
 	}
 
+	Controller* player1 = new Controller(true);
+	Controller* player2 = new Controller(false);
 	PPU* ppu = new PPU(mirroring, fourScreenMode);
-	CPU* cpu = new CPU(romBytes, cartRAM, programRomPageCount, mapper, ppu);
+	CPU* cpu = new CPU(romBytes, cartRAM, programRomPageCount, mapper, ppu, player1, player2);
 	if (debug) cpu->setDebug();
 	// reset interrupt on startup
 	cpu->reset();
 
-	View* view = new View(ppu);
+	View* view = new View(ppu, player1, player2);
 	if (!view->init()){
 		std::cout<<"Error constructing View. Exiting";
 		return 0;

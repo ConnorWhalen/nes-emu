@@ -10,6 +10,7 @@
 
 #include "cpu.h"
 #include "ppu.h"
+#include "controller.h"
 #ifdef MAC
 	#include "view.h"
 #endif
