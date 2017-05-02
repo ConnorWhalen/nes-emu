@@ -103,7 +103,8 @@ int main(int argc, char *argv[]){
 	Controller* player1 = new Controller(true);
 	Controller* player2 = new Controller(false);
 	PPU* ppu = new PPU(mirroring, fourScreenMode);
-	CPU* cpu = new CPU(romBytes, cartRAM, programRomPageCount, mapper, ppu, player1, player2);
+	APU* apu = new APU(new Audio());
+	CPU* cpu = new CPU(romBytes, cartRAM, programRomPageCount, mapper, ppu, apu, player1, player2);
 	if (debug) cpu->setDebug();
 	// reset interrupt on startup
 	cpu->reset();

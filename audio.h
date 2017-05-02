@@ -17,6 +17,9 @@ typedef struct{
 	unsigned short pulse1Timer;
 	unsigned char pulse1Length;
 
+	unsigned short pulse1CurrentTimer;
+	unsigned char pulse1Phase;
+
 	bool* pulse2Duty;
 	bool pulse2Halt;
 	bool pulse2Envelope;
@@ -54,6 +57,10 @@ typedef struct{
 	bool deltaEnable;
 	bool frameSequence;
 	bool frameInterrupt;
+
+	unsigned char frameCount;
+	unsigned short frameTimer;
+	unsigned short pulse1Time;
 } AudioData;
 
 class Audio{
@@ -116,6 +123,8 @@ class Audio{
 		unsigned char getStatus();
 	private:
 		static constexpr int sampleRate = 44100;
+		static constexpr int samplesPerFrame = 735;
+		static constexpr int apuCyclesPerFrame = 14915;
 		unsigned char getLength(unsigned char index);
 		PaStreamParameters* outputParams;
 		PaStream* outputStream;

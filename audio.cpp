@@ -19,6 +19,15 @@ static int paCallback(const void *inputBuffer, void *outputBuffer,
 	unsigned char delta = 0;
 	
 	for (int i=0; i < framesPerBuffer; i++){
+		if (audioData->pulse1Timer > 7 && !audioData->pulse1Halt && audioData->pulse1Length != 0){
+			if (--audioData->pulse1CurrentTimer == -1){
+				audioData->pulse1CurrentTimer = audioData->pulse1Timer;
+				if (++audioData->pulse1Phase == 8) audioData->pulse1Phase = 0;
+			}
+			if (audioData->pulse1Duty[audioData->pulse1Phase]) pulse1 = 1;
+		}
+
+
 		// mixing
 		*out = 0;
 		if (pulse1 != 0 || pulse2 != 0) *out += 95.88 / ((8128.0 / (pulse1 + pulse2)) + 100);
@@ -27,6 +36,11 @@ static int paCallback(const void *inputBuffer, void *outputBuffer,
 		if (*out > 1) *out = 1;
 		if (*out < -1) *out = -1;
 	}
+
+	if (audioData->pulse1Length != 0) audioData->pulse1Length--;
+	if (audioData->pulse2Length != 0) audioData->pulse2Length--;
+	if (audioData->triangleLength != 0) audioData->triangleLength--;
+	if (audioData->noiseLength != 0) audioData->noiseLength--;
 	
 	return paContinue;
 }
@@ -50,13 +64,68 @@ Audio::Audio(){
 	outputParams->hostApiSpecificStreamInfo = NULL;
 
 	audioData = new AudioData();
+	setPulse1Duty(0);
+	audioData->pulse1Halt = false;
+	audioData->pulse1Envelope = false;
+	audioData->pulse1EnvelopePeriod = 0;
+	audioData->pulse1Sweep = false;
+	audioData->pulse1SweepPeriod = 0;
+	audioData->pulse1SweepNegative = false;
+	audioData->pulse1SweepShift = 0;
+	audioData->pulse1Timer = 0;
+	audioData->pulse1Length = 0;
+
+	audioData->pulse1CurrentTimer = 0;
+	audioData->pulse1Phase = 0;
+
+	setPulse2Duty(0);
+	audioData->pulse2Halt = false;
+	audioData->pulse2Envelope = false;
+	audioData->pulse2EnvelopePeriod = 0;
+	audioData->pulse2Sweep = false;
+	audioData->pulse2SweepPeriod = 0;
+	audioData->pulse2SweepNegative = false;
+	audioData->pulse2SweepShift = 0;
+	audioData->pulse2Timer = 0;
+	audioData->pulse2Length = 0;
+
+	audioData->triangleHalt = false;
+	audioData->triangleFrameCount = 0;
+	audioData->triangleTimer = 0;
+	audioData->triangleLength = 0;
+
+	audioData->noiseHalt = false;
+	audioData->noiseEnvelope = false;
+	audioData->noiseEnvelopePeriod = 0;
+	audioData->noiseLoop = false;
+	audioData->noisePeriod = 0;
+	audioData->noiseLength = 0;
+
+	audioData->deltaInterrupt = false;
+	audioData->deltaLoop = false;
+	audioData->deltaFrequency = 0;
+	audioData->deltaDirect = 0;
+	audioData->deltaAddress = 0;
+	audioData->deltaLength = 0;
+
+	audioData->pulse1Enable = false;
+	audioData->pulse2Enable = false;
+	audioData->triangleEnable = false;
+	audioData->noiseEnable = false;
+	audioData->deltaEnable = false;
+	audioData->frameSequence = false;
+	audioData->frameInterrupt = false;
+
+	audioData->frameCount = 0;
+	audioData->frameTimer = 0;
+	audioData->pulse1Time = 0;
 
 	e = Pa_OpenStream(
 			&outputStream,
 			NULL,
 			outputParams,
 			sampleRate,
-			64,
+			samplesPerFrame,
 			paClipOff,
 			paCallback,
 			audioData);
@@ -126,7 +195,8 @@ void Audio::setPulse1TimerLow(unsigned char low){
 }
 
 void Audio::setPulse1Length(unsigned char length){
-	audioData->pulse1Length = length;
+	if (audioData->pulse1Enable) audioData->pulse1Length = getLength(length);
+	audioData->pulse1Phase = 0;
 }
 
 void Audio::setPulse2Duty(unsigned char duty){
@@ -174,7 +244,7 @@ void Audio::setPulse2TimerLow(unsigned char low){
 }
 
 void Audio::setPulse2Length(unsigned char length){
-	audioData->pulse2Length = length;
+	if (audioData->pulse2Enable) audioData->pulse2Length = getLength(length);
 }
 
 void Audio::setTriangleHalt(bool halt){
@@ -194,7 +264,7 @@ void Audio::setTriangleTimerLow(unsigned char low){
 }
 
 void Audio::setTriangleLength(unsigned char length){
-	audioData->triangleLength = length;
+	if (audioData->triangleEnable) audioData->triangleLength = getLength(length);
 }
 
 void Audio::setNoiseHalt(bool halt){
@@ -218,7 +288,7 @@ void Audio::setNoisePeriod(unsigned char period){
 }
 
 void Audio::setNoiseLength(unsigned char length){
-	audioData->noiseLength = length;
+	if (audioData->noiseEnable) audioData->noiseLength = getLength(length);
 }
 
 void Audio::setDeltaInterrupt(bool interrupt){
@@ -247,18 +317,22 @@ void Audio::setDeltaLength(unsigned char length){
 
 void Audio::setPulse1Enable(bool enable){
 	audioData->pulse1Enable = enable;
+	if (!enable) audioData->pulse1Length = 0;
 }
 
 void Audio::setPulse2Enable(bool enable){
 	audioData->pulse2Enable = enable;
+	if (!enable) audioData->pulse2Length = 0;
 }
 
 void Audio::setTriangleEnable(bool enable){
 	audioData->triangleEnable = enable;
+	if (!enable) audioData->triangleLength = 0;
 }
 
 void Audio::setNoiseEnable(bool enable){
 	audioData->noiseEnable = enable;
+	if (!enable) audioData->noiseLength = 0;
 }
 
 void Audio::setDeltaEnable(bool enable){
@@ -278,18 +352,18 @@ unsigned char Audio::getStatus(){
 	return 0;
 }
 
-int main(){
-	Audio* a = new Audio();
-	auto now = std::chrono::high_resolution_clock::now();
-	auto prev = std::chrono::high_resolution_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
-	while (elapsed.count() < 1000){
-		now = std::chrono::high_resolution_clock::now();
-		elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
-	}
-	a->stopStream();
-	return 0;
-}
+// int main(){
+// 	Audio* a = new Audio();
+// 	auto now = std::chrono::high_resolution_clock::now();
+// 	auto prev = std::chrono::high_resolution_clock::now();
+// 	auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
+// 	while (elapsed.count() < 1000){
+// 		now = std::chrono::high_resolution_clock::now();
+// 		elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
+// 	}
+// 	a->stopStream();
+// 	return 0;
+// }
 
 unsigned char Audio::getLength(unsigned char index){
 	unsigned char ret = 1;

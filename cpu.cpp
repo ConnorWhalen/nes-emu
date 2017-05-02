@@ -14,6 +14,7 @@ unsigned char CPU::valueAt(unsigned short address){
 		// mapper specific space
 	} else if (address > 0x3fff){
 		// get I/O register
+		if (address == 0x4015) ret = apu->getReg(address & 0x00ff);
 		if (address == 0x4016) ret = player1->read();
 		if (address == 0x4017) ret = player2->read();
 	} else if (address > 0x1fff){
@@ -48,9 +49,10 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 		// mapper specific space
 	} else if (address > 0x3fff){
 		// set I/O register
+		if ((address >= 0x4000 && address < 0x4014) || address == 0x4015 || address == 0x4017) apu->setReg(address & 0x00ff, value);
 		if (address == 0x4014) ppu->oamdma(value, this);
-		else if (address == 0x4016) player1->write((value & 0x01) == 0x01);
-		else if (address == 0x4017) player2->write((value & 0x01) == 0x01);
+		if (address == 0x4016) player1->write((value & 0x01) == 0x01);
+		if (address == 0x4017) player2->write((value & 0x01) == 0x01);
 	} else if (address > 0x1fff){
 		ppu->setReg((address-0x2000) % 0x008, value);
 	} else{ // address < 0x2000
@@ -59,7 +61,7 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 }
 
 CPU::CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned short programBankCount,
-		 unsigned short mapper, PPU* ppu, Controller* player1, Controller* player2){
+		 unsigned short mapper, PPU* ppu, APU* apu, Controller* player1, Controller* player2){
 	PC = 0;
 	SP = 0xff;
 	A = 0;
@@ -79,6 +81,7 @@ CPU::CPU(std::vector<unsigned char>* romBytes, unsigned char* cartRAM, unsigned 
 	}
 	this->debug = false;
 	this->ppu = ppu;
+	this->apu = apu;
 	this->player1 = player1;
 	this->player2 = player2;
 }
