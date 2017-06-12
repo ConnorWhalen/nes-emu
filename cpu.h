@@ -11,6 +11,7 @@
 #include "controller.h"
 
 class PPU;
+class APU;
 
 class CPU {
 	friend class PPU;
@@ -28,6 +29,7 @@ class CPU {
 			unsigned short mapper, PPU* ppu, APU* apu, Controller* player1, Controller* player2);
 		void reset();
 		void nmi();
+		void irq();
 		void setDebug();
 
 		unsigned char execute();

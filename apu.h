@@ -5,6 +5,8 @@
 
 #include "audio.h"
 
+class Audio;
+
 class APU{
 	public:
 		APU(Audio* audio);

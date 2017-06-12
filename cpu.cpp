@@ -32,6 +32,7 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 	} else if (address > 0xBfff){
 		if (mapper == 2){
 			if (debug) std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
+			// std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
 			programBank0 = value % programBankCount;
 		} else{
 			(*romBytes)[(programBank1 * 0x4000) + (address-0xC000)] = value;
@@ -39,6 +40,7 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 	} else if (address > 0x7fff){
 		if (mapper == 2){
 			if (debug) std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
+			// std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
 			programBank0 = value % programBankCount;
 		} else{
 			(*romBytes)[(programBank0 * 0x4000) + (address-0x8000)] = value;
@@ -92,11 +94,21 @@ void CPU::reset(){
 }
 
 void CPU::nmi(){
-	std::cout<< "Starting NMI\n";
+	// std::cout<< "Starting NMI\n";
 	setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 	setValueAt(0x100 + SP--, (PC & 0x00ff));
 	setValueAt(0x100 + SP--, P);
 	PC = (valueAt(0xfffb) << 8) + valueAt(0xfffa);
+}
+
+void CPU::irq(){
+	if ((P & interruptDisableMask) != interruptDisableMask){
+		// std::cout<< "Starting IRQ\n";
+		setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
+		setValueAt(0x100 + SP--, (PC & 0x00ff));
+		setValueAt(0x100 + SP--, P);
+		PC = (valueAt(0xffff) << 8) + valueAt(0xfffe);
+	}
 }
 
 void CPU::setDebug(){
@@ -139,7 +151,11 @@ unsigned char CPU::execute(){
 		// std::cin>>dummy;
 		// std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
-	if (PC == 0xd582) std::cout << "NMI Complete\n";
+	// if (PC == 0xd582) std::cout << "NMI Complete\n";
+	// if (PC == 0xd4a8 && SP == 0xf6 && programBank0 == 6) debug = true;
+	// if (PC == 0xd4a8 && SP == 0xf8 && programBank0 == 4) debug = false;
+	// if (PC == 0xd4a8) std::cout << std::hex << "interrupt with SP=" << int(SP) << " and current bank is " << int(programBank0) << "\n";
+	// if (PC == 0xd582) std::cout << std::hex << "returning with SP=" << int(SP) << " and current bank is " << int(programBank0) << "\n";
 
 	unsigned char opcode = valueAt(PC++);
 	int cycles = 1;

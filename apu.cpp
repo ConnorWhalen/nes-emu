@@ -16,6 +16,7 @@ unsigned char APU::getReg(unsigned char address){
 }
 
 void APU::setReg(unsigned char address, unsigned char value){
+	// std::cout<< "Setting APU register " << int(address) << " to " << int(value) << "\n";
 	switch (address){
 		case 0x00: audio->setPulse1Duty(value >> 6);
 				   audio->setPulse1Halt((value & 0x20) == 0x20);
@@ -85,7 +86,7 @@ void APU::setReg(unsigned char address, unsigned char value){
 				   audio->setPulse1Enable((value & 0x01) == 0x01);
 				   break;
 		case 0x17: audio->setFrameSequence((value & 0x80) == 0x80);
-				   audio->setFrameInterrupt((value & 0x40) == 0x40);
+				   audio->setFrameInterrupt((value & 0x40) != 0x40);
 				   break;
 		default: std::cout << "Invaled APU Address " << std::hex << int(address) << "\n";
 				   break;

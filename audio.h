@@ -5,6 +5,10 @@
 #include <iostream>
 #include <stdlib.h>
 
+#include "cpu.h"
+
+class CPU;
+
 typedef struct{
 	bool* pulse1Duty;
 	bool pulse1Halt;
@@ -18,7 +22,14 @@ typedef struct{
 	unsigned char pulse1Length;
 
 	unsigned short pulse1CurrentTimer;
+	unsigned short pulse1CalculatedTimer;
 	unsigned char pulse1Phase;
+	bool pulse1SweepMute;
+	bool pulse1StartFlag;
+	bool pulse1SweepReload;
+	unsigned char pulse1DecayCounter;
+	unsigned char pulse1EnvelopeCurrentPeriod;
+	unsigned char pulse1SweepCurrentPeriod;
 
 	bool* pulse2Duty;
 	bool pulse2Halt;
@@ -30,6 +41,16 @@ typedef struct{
 	unsigned char pulse2SweepShift;
 	unsigned short pulse2Timer;
 	unsigned char pulse2Length;
+
+	unsigned short pulse2CurrentTimer;
+	unsigned short pulse2CalculatedTimer;
+	unsigned char pulse2Phase;
+	bool pulse2SweepMute;
+	bool pulse2StartFlag;
+	bool pulse2SweepReload;
+	unsigned char pulse2DecayCounter;
+	unsigned char pulse2EnvelopeCurrentPeriod;
+	unsigned char pulse2SweepCurrentPeriod;
 
 	bool triangleHalt;
 	unsigned short triangleFrameCount;
@@ -59,9 +80,16 @@ typedef struct{
 	bool frameInterrupt;
 
 	unsigned char frameCount;
-	unsigned short frameTimer;
-	unsigned short pulse1Time;
+
+	CPU* cpu;
 } AudioData;
+
+void calculatePulse1Period(AudioData* audioData);
+void updatePulse1Sweep(AudioData* audioData);
+void calculatePulse1Envelope(AudioData* audioData);
+void calculatePulse2Period(AudioData* audioData);
+void updatePulse2Sweep(AudioData* audioData);
+void calculatePulse2Envelope(AudioData* audioData);
 
 class Audio{
 	public:
@@ -120,11 +148,13 @@ class Audio{
 		void setFrameSequence(bool sequence);
 		void setFrameInterrupt(bool interrupt);
 
+		void setCpu(CPU* cpu);
+
 		unsigned char getStatus();
 	private:
 		static constexpr int sampleRate = 44100;
 		static constexpr int samplesPerFrame = 735;
-		static constexpr int apuCyclesPerFrame = 14915;
+		static constexpr int samplesPerQuarterFrame = 184;
 		unsigned char getLength(unsigned char index);
 		PaStreamParameters* outputParams;
 		PaStream* outputStream;

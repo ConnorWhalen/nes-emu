@@ -1,12 +1,12 @@
 #include "audio.h"
 
-// portaudio callback which processes the next <framesPerBuffer> samples
+// portaudio callback which processes the next <samplesPerFrame> samples
 static int paCallback(const void *inputBuffer, void *outputBuffer,
-						  unsigned long framesPerBuffer,
+						  unsigned long samplesPerFrame,
 						  const PaStreamCallbackTimeInfo* timeInfo,
 						  PaStreamCallbackFlags statusFlags,
 						  void *userData){
-	AudioData *data = (AudioData*)userData;
+	AudioData *audioData = (AudioData*)userData;
 	float *out = (float*)outputBuffer;
 	(void) timeInfo;
 	(void) statusFlags;
@@ -18,29 +18,93 @@ static int paCallback(const void *inputBuffer, void *outputBuffer,
 	unsigned char noise = 0;
 	unsigned char delta = 0;
 	
-	for (int i=0; i < framesPerBuffer; i++){
-		if (audioData->pulse1Timer > 7 && !audioData->pulse1Halt && audioData->pulse1Length != 0){
-			if (--audioData->pulse1CurrentTimer == -1){
-				audioData->pulse1CurrentTimer = audioData->pulse1Timer;
-				if (++audioData->pulse1Phase == 8) audioData->pulse1Phase = 0;
+	for (int i = 0; i < samplesPerFrame; i++){
+		// pulse 1 clocked ~ 20x audio sample rate
+		// TODO: filtering downsampled signal, for now take last (20th) value
+		for (int i = 0; i < 20; i++){
+			// pulse 1
+			if (audioData->pulse1CalculatedTimer > 7 && !audioData->pulse1Halt && audioData->pulse1Length != 0){
+				// std::cout<< "pulse 1 enabled " << audioData->pulse1SweepMute << " " << int(audioData->pulse1Duty[audioData->pulse1Phase]) << "\n";
+				if (audioData->pulse1CurrentTimer == 0){
+					audioData->pulse1CurrentTimer = audioData->pulse1CalculatedTimer;
+					if (++audioData->pulse1Phase == 8) audioData->pulse1Phase = 0;
+				} else{
+					audioData->pulse1CurrentTimer--;
+				}
+				if (!audioData->pulse1SweepMute && audioData->pulse1Duty[audioData->pulse1Phase]){
+					// std::cout<< "determining pulse 1 output" << "\n";
+					if (audioData->pulse1Envelope) pulse1 = audioData->pulse1EnvelopePeriod;
+					else pulse1 = audioData->pulse1DecayCounter;
+				} else pulse1 = 0;
 			}
-			if (audioData->pulse1Duty[audioData->pulse1Phase]) pulse1 = 1;
+
+			// pulse 2
+			if (audioData->pulse2CalculatedTimer > 7 && !audioData->pulse2Halt && audioData->pulse2Length != 0){
+				// std::cout<< "pulse 2 enabled " << audioData->pulse2SweepMute << " " << int(audioData->pulse2Duty[audioData->pulse2Phase]) << "\n";
+				if (audioData->pulse2CurrentTimer == 0){
+					audioData->pulse2CurrentTimer = audioData->pulse2CalculatedTimer;
+					if (++audioData->pulse2Phase == 8) audioData->pulse2Phase = 0;
+				} else{
+					audioData->pulse2CurrentTimer--;
+				}
+				if (!audioData->pulse2SweepMute && audioData->pulse2Duty[audioData->pulse2Phase]){
+					// std::cout<< "determining pulse 2 output" << "\n";
+					if (audioData->pulse2Envelope) pulse2 = audioData->pulse2EnvelopePeriod;
+					else pulse2 = audioData->pulse2DecayCounter;
+				} else pulse2 = 0;
+			}
 		}
 
 
-		// mixing
-		*out = 0;
-		if (pulse1 != 0 || pulse2 != 0) *out += 95.88 / ((8128.0 / (pulse1 + pulse2)) + 100);
-		if (triangle != 0 || noise != 0 || delta != 0) *out += 159.79 / ((1 / (triangle/8227.0 + noise/12241.0 + delta/22638.0)) + 100);
-		*out = (*out * 2) - 1;
-		if (*out > 1) *out = 1;
-		if (*out < -1) *out = -1;
+		// mixing, may need to be approximated
+		float mixed = 0;
+		if (pulse1 != 0 || pulse2 != 0) mixed += 95.88 / ((8128.0 / (pulse1 + pulse2)) + 100);
+		if (triangle != 0 || noise != 0 || delta != 0) mixed += 159.79 / ((1 / (triangle/8227.0 + noise/12241.0 + delta/22638.0)) + 100);
+		*out++ = mixed;
+		// std::cout<< mixed << "\n";
 	}
 
-	if (audioData->pulse1Length != 0) audioData->pulse1Length--;
-	if (audioData->pulse2Length != 0) audioData->pulse2Length--;
-	if (audioData->triangleLength != 0) audioData->triangleLength--;
-	if (audioData->noiseLength != 0) audioData->noiseLength--;
+	// Frame counter
+	audioData->frameCount++;
+	if (audioData->frameSequence){
+		// 5 step sequence
+		if (audioData->frameCount > 4) audioData->frameCount = 0;
+
+		if (audioData->frameCount == 1 || audioData->frameCount == 4){
+			if (audioData->pulse1Length != 0) audioData->pulse1Length--;
+			if (audioData->pulse2Length != 0) audioData->pulse2Length--;
+			if (audioData->triangleLength != 0) audioData->triangleLength--;
+			if (audioData->noiseLength != 0) audioData->noiseLength--;
+			updatePulse1Sweep(audioData);
+			updatePulse2Sweep(audioData);
+		}
+
+		if (audioData->frameCount != 3){
+			calculatePulse1Envelope(audioData);
+			calculatePulse2Envelope(audioData);
+		}
+	}else{
+		// 4 step sequence
+		if (audioData->frameCount > 3) audioData->frameCount = 0;
+
+		if (audioData->frameCount == 1 || audioData->frameCount == 3){
+			if (audioData->pulse1Length != 0) audioData->pulse1Length--;
+			if (audioData->pulse2Length != 0) audioData->pulse2Length--;
+			if (audioData->triangleLength != 0) audioData->triangleLength--;
+			if (audioData->noiseLength != 0) audioData->noiseLength--;
+			updatePulse1Sweep(audioData);
+			updatePulse2Sweep(audioData);
+		}
+
+		calculatePulse1Envelope(audioData);
+		calculatePulse2Envelope(audioData);
+
+		if (audioData->frameInterrupt){
+			if (audioData->cpu != NULL){
+				audioData->cpu->irq();
+			}
+		}
+	}
 	
 	return paContinue;
 }
@@ -64,6 +128,7 @@ Audio::Audio(){
 	outputParams->hostApiSpecificStreamInfo = NULL;
 
 	audioData = new AudioData();
+
 	setPulse1Duty(0);
 	audioData->pulse1Halt = false;
 	audioData->pulse1Envelope = false;
@@ -76,7 +141,14 @@ Audio::Audio(){
 	audioData->pulse1Length = 0;
 
 	audioData->pulse1CurrentTimer = 0;
+	audioData->pulse1CalculatedTimer = 0;
 	audioData->pulse1Phase = 0;
+	audioData->pulse1SweepMute = false;
+	audioData->pulse1StartFlag = false;
+	audioData->pulse1SweepReload = false;
+	audioData->pulse1DecayCounter = 0;
+	audioData->pulse1EnvelopeCurrentPeriod = 0;
+	audioData->pulse1SweepCurrentPeriod = 0;
 
 	setPulse2Duty(0);
 	audioData->pulse2Halt = false;
@@ -88,6 +160,16 @@ Audio::Audio(){
 	audioData->pulse2SweepShift = 0;
 	audioData->pulse2Timer = 0;
 	audioData->pulse2Length = 0;
+
+	audioData->pulse2CurrentTimer = 0;
+	audioData->pulse2CalculatedTimer = 0;
+	audioData->pulse2Phase = 0;
+	audioData->pulse2SweepMute = false;
+	audioData->pulse2StartFlag = false;
+	audioData->pulse2SweepReload = false;
+	audioData->pulse2DecayCounter = 0;
+	audioData->pulse2EnvelopeCurrentPeriod = 0;
+	audioData->pulse2SweepCurrentPeriod = 0;
 
 	audioData->triangleHalt = false;
 	audioData->triangleFrameCount = 0;
@@ -117,15 +199,15 @@ Audio::Audio(){
 	audioData->frameInterrupt = false;
 
 	audioData->frameCount = 0;
-	audioData->frameTimer = 0;
-	audioData->pulse1Time = 0;
+
+	audioData->cpu = NULL;
 
 	e = Pa_OpenStream(
 			&outputStream,
 			NULL,
 			outputParams,
 			sampleRate,
-			samplesPerFrame,
+			samplesPerQuarterFrame,
 			paClipOff,
 			paCallback,
 			audioData);
@@ -149,11 +231,111 @@ void Audio::stopStream(){
 	}
 }
 
+void calculatePulse1Period(AudioData* audioData){
+	audioData->pulse1CalculatedTimer = audioData->pulse1Timer;
+	short pulse1PeriodOffset = audioData->pulse1Timer >> audioData->pulse1SweepShift;
+	if (audioData->pulse1SweepNegative) pulse1PeriodOffset = -pulse1PeriodOffset;
+	// std::cout << int(audioData->pulse1CalculatedTimer) << " " << int(pulse1PeriodOffset) << "\n";
+	if (audioData->pulse1CalculatedTimer + pulse1PeriodOffset > 0x7ff){
+		audioData->pulse1SweepMute = true;
+	}
+	else{
+		audioData->pulse1SweepMute = false;
+		if (audioData->pulse1Sweep){
+			audioData->pulse1CalculatedTimer += pulse1PeriodOffset;
+		}
+	}
+	// std::cout<< "calculating pulse 1 period = " << audioData->pulse1CalculatedTimer << "\n";
+}
+
+void updatePulse1Sweep(AudioData* audioData){
+	// std::cout<< "updating pulse 1 sweep" << "\n";
+	if (audioData->pulse1SweepReload){
+		audioData->pulse1SweepReload = false;
+		if (audioData->pulse1SweepCurrentPeriod == 0){
+			calculatePulse1Period(audioData);
+		}
+		audioData->pulse1SweepCurrentPeriod = audioData->pulse1SweepPeriod;
+	} else if (audioData->pulse1SweepCurrentPeriod > 0){
+		audioData->pulse1SweepCurrentPeriod--;
+	} else {
+		audioData->pulse1SweepCurrentPeriod = audioData->pulse1SweepPeriod;
+		calculatePulse1Period(audioData);
+	}
+}
+
+void calculatePulse1Envelope(AudioData* audioData){
+	if (audioData->pulse1StartFlag){
+		audioData->pulse1StartFlag = false;
+		audioData->pulse1DecayCounter = 15;
+		audioData->pulse1EnvelopeCurrentPeriod = audioData->pulse1EnvelopePeriod;
+	} else{
+		if (--audioData->pulse1EnvelopeCurrentPeriod == 0xff){
+			audioData->pulse1EnvelopeCurrentPeriod = audioData->pulse1EnvelopePeriod;
+			if (audioData->pulse1DecayCounter > 0){
+				audioData->pulse1DecayCounter--;
+			} else if (audioData->pulse1Halt){
+				audioData->pulse1DecayCounter = 15;
+			}
+		}
+	}
+}
+
+void calculatePulse2Period(AudioData* audioData){
+	audioData->pulse2CalculatedTimer = audioData->pulse2Timer;
+	short pulse2PeriodOffset = audioData->pulse2Timer >> audioData->pulse2SweepShift;
+	if (audioData->pulse2SweepNegative) pulse2PeriodOffset = -pulse2PeriodOffset;
+	// std::cout << int(audioData->pulse2CalculatedTimer) << " " << int(pulse2PeriodOffset) << "\n";
+	if (audioData->pulse2CalculatedTimer + pulse2PeriodOffset > 0x7ff){
+		audioData->pulse2SweepMute = true;
+	}
+	else{
+		audioData->pulse2SweepMute = false;
+		if (audioData->pulse2Sweep){
+			audioData->pulse2CalculatedTimer += pulse2PeriodOffset;
+		}
+	}
+	// std::cout<< "calculating pulse 2 period = " << audioData->pulse2CalculatedTimer << "\n";
+}
+
+void updatePulse2Sweep(AudioData* audioData){
+	// std::cout<< "updating pulse 2 sweep" << "\n";
+	if (audioData->pulse2SweepReload){
+		audioData->pulse2SweepReload = false;
+		if (audioData->pulse2SweepCurrentPeriod == 0){
+			calculatePulse2Period(audioData);
+		}
+		audioData->pulse2SweepCurrentPeriod = audioData->pulse2SweepPeriod;
+	} else if (audioData->pulse2SweepCurrentPeriod > 0){
+		audioData->pulse2SweepCurrentPeriod--;
+	} else {
+		audioData->pulse2SweepCurrentPeriod = audioData->pulse2SweepPeriod;
+		calculatePulse2Period(audioData);
+	}
+}
+
+void calculatePulse2Envelope(AudioData* audioData){
+	if (audioData->pulse2StartFlag){
+		audioData->pulse2StartFlag = false;
+		audioData->pulse2DecayCounter = 15;
+		audioData->pulse2EnvelopeCurrentPeriod = audioData->pulse2EnvelopePeriod;
+	} else{
+		if (--audioData->pulse2EnvelopeCurrentPeriod == 0xff){
+			audioData->pulse2EnvelopeCurrentPeriod = audioData->pulse2EnvelopePeriod;
+			if (audioData->pulse2DecayCounter > 0){
+				audioData->pulse2DecayCounter--;
+			} else if (audioData->pulse2Halt){
+				audioData->pulse2DecayCounter = 15;
+			}
+		}
+	}
+}
+
 void Audio::setPulse1Duty(unsigned char duty){
 	if (duty == 0) audioData->pulse1Duty = new bool[8] {false, true, false, false, false, false, false, false};
-	if (duty == 1) audioData->pulse1Duty = new bool[8] {false, true, true, false, false, false, false, false};
-	if (duty == 2) audioData->pulse1Duty = new bool[8] {false, true, true, true, true, false, false, false};
-	if (duty == 3) audioData->pulse1Duty = new bool[8] {true, false, false, true, true, true, true, true};
+	else if (duty == 1) audioData->pulse1Duty = new bool[8] {false, true, true, false, false, false, false, false};
+	else if (duty == 2) audioData->pulse1Duty = new bool[8] {false, true, true, true, true, false, false, false};
+	else if (duty == 3) audioData->pulse1Duty = new bool[8] {true, false, false, true, true, true, true, true};
 	else audioData->pulse1Duty = new bool[8] {false, false, false, false, false, false, false, false};
 }
 
@@ -175,6 +357,7 @@ void Audio::setPulse1Sweep(bool sweep){
 
 void Audio::setPulse1SweepPeriod(unsigned char period){
 	audioData->pulse1SweepPeriod = period;
+	audioData->pulse1SweepReload = true;
 }
 
 void Audio::setPulse1SweepNegative(bool negative){
@@ -191,19 +374,19 @@ void Audio::setPulse1TimerHigh(unsigned char high){
 
 void Audio::setPulse1TimerLow(unsigned char low){
 	audioData->pulse1Timer = low + (audioData->pulse1Timer & 0xff00);
-
 }
 
 void Audio::setPulse1Length(unsigned char length){
 	if (audioData->pulse1Enable) audioData->pulse1Length = getLength(length);
 	audioData->pulse1Phase = 0;
+	audioData->pulse1StartFlag = true;
 }
 
 void Audio::setPulse2Duty(unsigned char duty){
 	if (duty == 0) audioData->pulse2Duty = new bool[8] {false, true, false, false, false, false, false, false};
-	if (duty == 1) audioData->pulse2Duty = new bool[8] {false, true, true, false, false, false, false, false};
-	if (duty == 2) audioData->pulse2Duty = new bool[8] {false, true, true, true, true, false, false, false};
-	if (duty == 3) audioData->pulse2Duty = new bool[8] {true, false, false, true, true, true, true, true};
+	else if (duty == 1) audioData->pulse2Duty = new bool[8] {false, true, true, false, false, false, false, false};
+	else if (duty == 2) audioData->pulse2Duty = new bool[8] {false, true, true, true, true, false, false, false};
+	else if (duty == 3) audioData->pulse2Duty = new bool[8] {true, false, false, true, true, true, true, true};
 	else audioData->pulse2Duty = new bool[8] {false, false, false, false, false, false, false, false};
 }
 
@@ -225,6 +408,7 @@ void Audio::setPulse2Sweep(bool sweep){
 
 void Audio::setPulse2SweepPeriod(unsigned char period){
 	audioData->pulse2SweepPeriod = period;
+	audioData->pulse2SweepReload = true;
 }
 
 void Audio::setPulse2SweepNegative(bool negative){
@@ -245,6 +429,8 @@ void Audio::setPulse2TimerLow(unsigned char low){
 
 void Audio::setPulse2Length(unsigned char length){
 	if (audioData->pulse2Enable) audioData->pulse2Length = getLength(length);
+	audioData->pulse2Phase = 0;
+	audioData->pulse2StartFlag = true;
 }
 
 void Audio::setTriangleHalt(bool halt){
@@ -341,10 +527,16 @@ void Audio::setDeltaEnable(bool enable){
 
 void Audio::setFrameSequence(bool sequence){
 	audioData->frameSequence = sequence;
+	audioData->frameCount = 0;
 }
 
 void Audio::setFrameInterrupt(bool interrupt){
+	std::cout << "setting frame interrupt enable to " << int(interrupt) << "\n";
 	audioData->frameInterrupt = interrupt;
+}
+
+void Audio::setCpu(CPU* cpu){
+	audioData->cpu = cpu;
 }
 
 unsigned char Audio::getStatus(){
@@ -354,10 +546,30 @@ unsigned char Audio::getStatus(){
 
 // int main(){
 // 	Audio* a = new Audio();
+// 	a->setPulse2Enable(true);
+// 	a->setPulse2Duty(2);
+// 	a->setPulse2EnvelopePeriod(8);
+// 	a->setPulse2Envelope(true);
+// 	a->setPulse2Sweep(false);
+// 	a->setPulse2SweepNegative(true);
+// 	a->setPulse2TimerHigh(0);
+// 	a->setPulse2TimerLow(127);
+// 	a->setPulse2Length(1);
 // 	auto now = std::chrono::high_resolution_clock::now();
 // 	auto prev = std::chrono::high_resolution_clock::now();
 // 	auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
 // 	while (elapsed.count() < 1000){
+// 		now = std::chrono::high_resolution_clock::now();
+// 		elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
+// 	}
+
+// 	a->setPulse2TimerHigh(0);
+// 	a->setPulse2TimerLow(150);
+// 	a->setPulse2Length(1);
+// 	now = std::chrono::high_resolution_clock::now();
+// 	prev = std::chrono::high_resolution_clock::now();
+// 	elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
+// 	while (elapsed.count() < 4000){
 // 		now = std::chrono::high_resolution_clock::now();
 // 		elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1,1000>>>(now - prev);
 // 	}
