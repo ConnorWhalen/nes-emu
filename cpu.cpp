@@ -32,23 +32,26 @@ void CPU::setValueAt(unsigned short address, unsigned char value){
 	} else if (address > 0xBfff){
 		if (mapper == 2){
 			if (debug) std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
-			// std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
+			// std::cout << "Switching to bank " << int(value % programBankCount) << " (PC = " << int(PC) << ")" << "\n";
 			programBank0 = value % programBankCount;
 		} else{
-			(*romBytes)[(programBank1 * 0x4000) + (address-0xC000)] = value;
+			std::cout<< "Attempting write to ROM" << "\n";
+			// (*romBytes)[(programBank1 * 0x4000) + (address-0xC000)] = value;
 		}
 	} else if (address > 0x7fff){
 		if (mapper == 2){
 			if (debug) std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
-			// std::cout << "Switching to bank " << int(value % programBankCount) << "\n";
+			// std::cout << "Switching to bank " << int(value % programBankCount) << " (PC = " << int(PC) << ")" << "\n";
 			programBank0 = value % programBankCount;
 		} else{
-			(*romBytes)[(programBank0 * 0x4000) + (address-0x8000)] = value;
+			std::cout<< "Attempting write to ROM" << "\n";
+			// (*romBytes)[(programBank0 * 0x4000) + (address-0x8000)] = value;
 		}
 	} else if (address > 0x5fff){
 		cartRAM[address-0x6000] = value;
 	} else if (address > 0x401f){
 		// mapper specific space
+		std::cout << "Writing " << std::hex << int(value) << " to " << int(address) << "\n";
 	} else if (address > 0x3fff){
 		// set I/O register
 		if ((address >= 0x4000 && address < 0x4014) || address == 0x4015 || address == 0x4017) apu->setReg(address & 0x00ff, value);
@@ -99,15 +102,17 @@ void CPU::nmi(){
 	setValueAt(0x100 + SP--, (PC & 0x00ff));
 	setValueAt(0x100 + SP--, P);
 	PC = (valueAt(0xfffb) << 8) + valueAt(0xfffa);
+	P |= interruptDisableMask;
 }
 
 void CPU::irq(){
 	if ((P & interruptDisableMask) != interruptDisableMask){
-		// std::cout<< "Starting IRQ\n";
+		std::cout<< "Starting IRQ\n";
 		setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 		setValueAt(0x100 + SP--, (PC & 0x00ff));
 		setValueAt(0x100 + SP--, P);
 		PC = (valueAt(0xffff) << 8) + valueAt(0xfffe);
+		P |= interruptDisableMask;
 	}
 }
 
@@ -127,6 +132,10 @@ void CPU::writeRamToFile(std::string filename){
 	outFile.close();
 }
 
+unsigned char* CPU::getRAM(){
+	return RAM;
+}
+
 /*
 * Calls the instruction function corresponding to opcode
 * Instruction function names are instruction name followed by addressing mode
@@ -144,10 +153,13 @@ void CPU::writeRamToFile(std::string filename){
 * ACC - accumulator
 */
 unsigned char CPU::execute(){
-	if (debug && PC != 0xc02b && PC != 0xc02d){
-		std::cout<< "*****CPU STATUS*****\n";
-		std::cout<< std::hex << "PC: " << int(PC) << ", A: " << int(A) << ", X: " << int(X) << ", Y: " << int(Y) << ", P: " << int(P) << ", SP: " << int(SP) << "\n";
-		std::cout<< "NEXT IS: " << int(valueAt(PC)) << " " << int(valueAt(PC+1)) << " " << int(valueAt(PC+2)) << " " << int(valueAt(PC+3)) << "\n";
+	if (debug && PC != 0xc02b && PC != 0xc02d && PC != 0xd874 && PC != 0xd876 && PC != 0xd879 && PC != 0xd87a
+		      && PC != 0xb55f && PC != 0xb562 && PC != 0xb563){
+		std::cout<< "*****CPU STATUS***** ";
+		std::cout<< std::hex << "PC: " << int(PC) << ", A: " << int(A) << ", X: " << int(X)
+							 << ", Y: " << int(Y) << ", P: " << int(P) << ", SP: " << int(SP) << "\n";
+		std::cout<< "NEXT IS: " << int(valueAt(PC)) << " " << int(valueAt(PC+1)) << " "
+								<< int(valueAt(PC+2)) << " " << int(valueAt(PC+3)) << "\n";
 		// std::cin>>dummy;
 		// std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
@@ -666,11 +678,13 @@ unsigned short CPU::_ZP(){
 	return valueAt(PC++);
 }
 unsigned short CPU::_ZPX(){
-	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + X % 0x100)) << " from address " << int(valueAt(PC) + X % 0x100) << "\n";
+	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + X % 0x100))
+	// << " from address " << int(valueAt(PC) + X % 0x100) << "\n";
 	return (valueAt(PC++) + X) % 0x100;
 }
 unsigned short CPU::_ZPY(){
-	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + Y % 0x100)) << " from address " << int(valueAt(PC) + Y % 0x100) << "\n";
+	// if (debug) std::cout << "fetching value " << int(valueAt(valueAt(PC) + Y % 0x100))
+	// << " from address " << int(valueAt(PC) + Y % 0x100) << "\n";
 	return (valueAt(PC++) + Y) % 0x100;
 }
 unsigned short CPU::_AB(){
@@ -702,6 +716,21 @@ unsigned short CPU::_INY(){
 	// if (debug) std::cout << "fetching value " << int(valueAt(ret)) << " from address " << int(ret) << "\n";
 	PC++;
 	return ret;
+}
+
+/******************************************************************************
+* Branch routine
+******************************************************************************/
+
+unsigned char CPU::Branch(bool condition){
+	char offset = valueAt(PC++);
+	unsigned char cycles = 2;
+	if (condition){
+		cycles += 1;
+		if ((PC % 0x100) + offset > 0x00ff || (PC % 0x100) + offset < 0) cycles += 2;
+		PC += offset;
+	}
+	return cycles;
 }
 
 /******************************************************************************
@@ -763,7 +792,7 @@ void CPU::ADC(unsigned char operand){
 	if (op1 > 0 && op2 > 0 && (result & 0x80) == 0x80) P |= overflowMask;
 	else if (op1 < 0 && op2 < 0 && (result & 0x80) == 0x00) P |= overflowMask;
 	else P &= (0xff - overflowMask);
-	if (((unsigned short)(op1) + (unsigned short)(op2) & 0x100) == 0x100) P |= carryMask;
+	if (((unsigned short)(A) + (unsigned short)(operand) + (P & carryMask) & 0x100) == 0x100) P |= carryMask;
 	else P &= (0xff - carryMask);
 	A = (unsigned char)result;
 }
@@ -772,7 +801,7 @@ void CPU::ADC(unsigned char operand){
 * ANC - AND then Copy N to C
 ******************************************************************************/
 unsigned char CPU::ANC(){
-	if (debug) std::cout<< "ANC: ";
+	std::cout<< "Illegal opcode ANC \n";
 	unsigned char operand = valueAt(_IM());
 
 	unsigned char op1 = A;
@@ -890,45 +919,24 @@ unsigned char CPU::ASL(unsigned char operand){
 * BCC - Branch if Carry Cleared
 ******************************************************************************/
 unsigned char CPU::BCC(){
-	if (debug) std::cout<< "BCC: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & carryMask) == 0x00){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BCC: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & carryMask) == 0x00);
 }
 
 /******************************************************************************
 * BCS - Branch if Carry Set
 ******************************************************************************/
 unsigned char CPU::BCS(){
-	if (debug) std::cout<< "BCS: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & carryMask) == carryMask){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BCS: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & carryMask) == carryMask);
 }
 
 /******************************************************************************
 * BEQ - Branch if Equal
 ******************************************************************************/
 unsigned char CPU::BEQ(){
-	if (debug) std::cout<< "BEQ: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & zeroMask) == zeroMask){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BEQ: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & zeroMask) == zeroMask);
 }
 
 /******************************************************************************
@@ -954,45 +962,24 @@ void CPU::BIT(unsigned char operand){
 * BMI - Branch if Minus
 ******************************************************************************/
 unsigned char CPU::BMI(){
-	if (debug) std::cout<< "BMI: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & negativeMask) == negativeMask){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BMI: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & negativeMask) == negativeMask);
 }
 
 /******************************************************************************
 * BNE - Branch if Not Equal
 ******************************************************************************/
 unsigned char CPU::BNE(){
-	if (debug) std::cout<< "BNE: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & zeroMask) == 0x00){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BNE: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & zeroMask) == 0x00);
 }
 
 /******************************************************************************
 * BPL - Branch if Positive
 ******************************************************************************/
 unsigned char CPU::BPL(){
-	if (debug) std::cout<< "BPL: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & negativeMask) == 0x00){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BPL: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & negativeMask) == 0x00);
 }
 
 /******************************************************************************
@@ -1005,6 +992,7 @@ unsigned char CPU::BRK(){
 		setValueAt(0x100 + SP--, (PC & 0x00ff));
 		setValueAt(0x100 + SP--, P);
 		P |= breakMask;
+		P |= interruptDisableMask;
 		PC = valueAt(0xfffe) + (valueAt(0xffff) << 8);
 	}
 	return 7;
@@ -1014,30 +1002,16 @@ unsigned char CPU::BRK(){
 * BVC - Branch if Overflow Cleared
 ******************************************************************************/
 unsigned char CPU::BVC(){
-	if (debug) std::cout<< "BVC: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & overflowMask) == 0x00){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BVC: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & overflowMask) == 0x00);
 }
 
 /******************************************************************************
 * BVS - Branch if Overflow Set
 ******************************************************************************/
 unsigned char CPU::BVS(){
-	if (debug) std::cout<< "BVS: branch to " << int(valueAt(PC)) << "\n";
-	char offset = valueAt(PC++);
-	unsigned char cycles = 2;
-	if ((P & overflowMask) == overflowMask){
-		cycles += 1;
-		if ((PC % 0x100) + offset > 0xff) cycles += 2;
-		PC += offset;
-	}
-	return cycles;
+	if (debug) std::cout<< "BVS: branch to " << int(char(valueAt(PC)) + PC + 1) << "\n";
+	return Branch((P & overflowMask) == overflowMask);
 }
 
 /******************************************************************************
@@ -1053,7 +1027,7 @@ unsigned char CPU::CLC(){
 * CLD - Clear Decimal Flag
 ******************************************************************************/
 unsigned char CPU::CLD(){
-	if (debug) std::cout<< "CLC: " << "\n";
+	if (debug) std::cout<< "CLD: " << "\n";
 	P &= (0xff - decimalMask);
 	return 2;
 }
@@ -1062,7 +1036,7 @@ unsigned char CPU::CLD(){
 * CLI - Clear Interrupt Disable Flag
 ******************************************************************************/
 unsigned char CPU::CLI(){
-	if (debug) std::cout<< "CLC: " << "\n";
+	if (debug) std::cout<< "CLI: " << "\n";
 	P &= (0xff - interruptDisableMask);
 	return 2;
 }
@@ -1071,7 +1045,7 @@ unsigned char CPU::CLI(){
 * CLV - Clear Overflow Flag
 ******************************************************************************/
 unsigned char CPU::CLV(){
-	if (debug) std::cout<< "CLC: " << "\n";
+	if (debug) std::cout<< "CLV: " << "\n";
 	P &= (0xff - overflowMask);
 	return 2;
 }
@@ -1189,19 +1163,19 @@ void CPU::CPY(unsigned char operand){
 * DCP - Decrement then Compare
 ******************************************************************************/
 unsigned char CPU::DCP_ZP(){
-	if (debug) std::cout<< "DCP_ZP: ";
+	std::cout<< "Illegal opcode DCP_ZP \n";
 	unsigned short addr = _ZP();
 	setValueAt(addr, DCP(valueAt(addr)));
 	return 5;
 }
 unsigned char CPU::DCP_ABX(){
-	if (debug) std::cout<< "DCP_ABX: ";
+	std::cout<< "Illegal opcode DCP_ABX \n";
 	unsigned short addr = _ABX();
 	setValueAt(addr, DCP(valueAt(addr)));
 	return 7;
 }
 unsigned char CPU::DCP_ABY(){
-	if (debug) std::cout<< "DCP_ABY: ";
+	std::cout<< "Illegal opcode DCP_ABY \n";
 	unsigned short addr = _ABY();
 	setValueAt(addr, DCP(valueAt(addr)));
 	return 7;
@@ -1431,31 +1405,31 @@ unsigned char CPU::INY(){
 * ISC - Increment then Subtract
 ******************************************************************************/
 unsigned char CPU::ISC_ZPX(){
-	if (debug) std::cout<< "ISC_ZPX: ";
+	std::cout<< "Illegal opcode ISC_ZPX \n";
 	unsigned short addr = _ZPX();
 	setValueAt(addr, ISC(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::ISC_AB(){
-	if (debug) std::cout<< "ISC_AB: ";
+	std::cout<< "Illegal opcode ISC_AB \n";
 	unsigned short addr = _AB();
 	setValueAt(addr, ISC(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::ISC_ABX(){
-	if (debug) std::cout<< "ISC_ABX: ";
+	std::cout<< "Illegal opcode ISC_ABX \n";
 	unsigned short addr = _ABX();
 	setValueAt(addr, ISC(valueAt(addr)));
 	return 7;
 }
 unsigned char CPU::ISC_ABY(){
-	if (debug) std::cout<< "ISC_ABY: ";
+	std::cout<< "Illegal opcode ISC_ABY \n";
 	unsigned short addr = _ABY();
 	setValueAt(addr, ISC(valueAt(addr)));
 	return 7;
 }
 unsigned char CPU::ISC_INX(){
-	if (debug) std::cout<< "ISC_INX: ";
+	std::cout<< "Illegal opcode ISC_INX \n";
 	unsigned short addr = _INX();
 	setValueAt(addr, ISC(addr));
 	return 8;
@@ -1475,7 +1449,7 @@ unsigned char CPU::ISC(unsigned char operand){
 	if (op1 > 0 && op2 > 0 && (result & 0x80) == 0x80) P |= overflowMask;
 	else if (op1 < 0 && op2 < 0 && (result & 0x80) == 0x00) P |= overflowMask;
 	else P &= (0xff - overflowMask);
-	if (((unsigned short)(op1) + (unsigned short)(op2) & 0x100) == 0x100) P &= (0xff - carryMask);
+	if (((unsigned short)(A) + (unsigned short)(incResult) & 0x100) == 0x100) P &= (0xff - carryMask);
 	else P |= carryMask;
 	A = (unsigned char)result;
 
@@ -1495,9 +1469,9 @@ unsigned char CPU::JMP_IN(){
 	if (debug) std::cout<< "JMP_IN: ";
 	unsigned short addr = _AB();
 	if ((addr & 0x00ff) == 0x00ff){
-		addr = (valueAt(addr) << 8) + valueAt(addr-0xff);
+		addr = (valueAt(addr-0xff) << 8) + valueAt(addr);
 	} else{
-		addr = (valueAt(addr) << 8) + valueAt(addr+1);
+		addr = (valueAt(addr+1) << 8) + valueAt(addr);
 	}
 	JMP(addr);
 	return 5;
@@ -1512,8 +1486,8 @@ void CPU::JMP(unsigned short operand){
 unsigned char CPU::JSR(){
 	if (debug) std::cout<< "JSR: ";
 	unsigned short addr = _AB();
-	setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
-	setValueAt(0x100 + SP--, (PC & 0x00ff));
+	setValueAt(0x100 + SP--, ((PC-1) & 0xff00) >> 8);
+	setValueAt(0x100 + SP--, ((PC-1) & 0x00ff));
 	PC = addr;
 	return 6;
 }
@@ -1818,7 +1792,7 @@ unsigned char CPU::PLP(){
 * RLA - Rotate Left then AND
 ******************************************************************************/
 unsigned char CPU::RLA_ABX(){
-	if (debug) std::cout<< "RLA_ABX: ";
+	std::cout<< "Illegal opcode RLA_ABX \n";
 	unsigned short addr = _ABX();
 	setValueAt(addr, RLA(valueAt(addr)));
 	return 7;
@@ -1941,7 +1915,7 @@ unsigned char CPU::RTI(){
 ******************************************************************************/
 unsigned char CPU::RTS(){
 	if (debug) std::cout<< "RTS: ";
-	PC = valueAt(0x100 + ++SP);
+	PC = valueAt(0x100 + ++SP) + 1;
 	PC += valueAt(0x100 + ++SP) << 8;
 	return 6;
 }
@@ -1950,13 +1924,13 @@ unsigned char CPU::RTS(){
 * SAX - Store A AND X
 ******************************************************************************/
 unsigned char CPU::SAX_ZP(){
-	if (debug) std::cout<< "SAX_ZP: ";
+	std::cout<< "Illegal opcode SAX_ZP \n";
 	unsigned short addr = _ZP();
 	setValueAt(addr, SAX());
 	return 3;
 }
 unsigned char CPU::SAX_INX(){
-	if (debug) std::cout<< "SAX_INX: ";
+	std::cout<< "Illegal opcode SAX_INX \n";
 	unsigned short addr = _INX();
 	setValueAt(addr, SAX());
 	return 6;
@@ -2024,7 +1998,7 @@ void CPU::SBC(unsigned char operand){
 	if (op1 > 0 && op2 > 0 && (result & 0x80) == 0x80) P |= overflowMask;
 	else if (op1 < 0 && op2 < 0 && (result & 0x80) == 0x00) P |= overflowMask;
 	else P &= (0xff - overflowMask);
-	if (((unsigned short)(op1) + (unsigned short)(op2) & 0x100) == 0x100) P &= (0xff - carryMask);
+	if (((unsigned short)(A) + (unsigned short)(operand) & 0x100) + (P & carryMask) - 1 == 0x100) P &= (0xff - carryMask);
 	else P |= carryMask;
 	A = (unsigned char)result;
 }
@@ -2060,7 +2034,7 @@ unsigned char CPU::SEI(){
 * SKB - Skip Byte
 ******************************************************************************/
 unsigned char CPU::SKB(){
-	if (debug) std::cout<< "SKB: ";
+	std::cout<< "Illegal opcode SKB \n";
 	PC++;
 	return 2;
 }
@@ -2069,25 +2043,25 @@ unsigned char CPU::SKB(){
 * SLO - Shift Left then OR
 ******************************************************************************/
 unsigned char CPU::SLO_ZPX(){
-	if (debug) std::cout<< "SLO_ZPX: ";
+	std::cout<< "Illegal opcode SLO_ZPX \n";
 	unsigned short addr = _ZPX();
 	setValueAt(addr, SLO(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::SLO_AB(){
-	if (debug) std::cout<< "SLO_AB: ";
+	std::cout<< "Illegal opcode SLO_AB \n";
 	unsigned short addr = _AB();
 	setValueAt(addr, SLO(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::SLO_ABX(){
-	if (debug) std::cout<< "SLO_ABX: ";
+	std::cout<< "Illegal opcode SLO_ABX \n";
 	unsigned short addr = _ABX();
 	setValueAt(addr, SLO(valueAt(addr)));
 	return 7;
 }
 unsigned char CPU::SLO_INX(){
-	if (debug) std::cout<< "SLO_INX: ";
+	std::cout<< "Illegal opcode SLO_INX \n";
 	unsigned short addr = _INX();
 	setValueAt(addr, SLO(valueAt(addr)));
 	return 8;
@@ -2113,13 +2087,13 @@ unsigned char CPU::SLO(unsigned char operand){
 * SRE - Shift Right then EOR
 ******************************************************************************/
 unsigned char CPU::SRE_AB(){
-	if (debug) std::cout<< "SRE_AB: ";
+	std::cout<< "Illegal opcode SRE_AB \n";
 	unsigned short addr = _AB();
 	setValueAt(addr, SRE(valueAt(addr)));
 	return 6;
 }
 unsigned char CPU::SRE_INY(){
-	if (debug) std::cout<< "SRE_INY: ";
+	std::cout<< "Illegal opcode SRE_INY \n";
 	unsigned short addr = _INY();
 	setValueAt(addr, SRE(valueAt(addr)));
 	return 8;

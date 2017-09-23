@@ -35,6 +35,7 @@ class CPU {
 		unsigned char execute();
 
 		void writeRamToFile(std::string filename);
+		unsigned char* getRAM();
 
 	private:
 		unsigned short PC;
@@ -71,6 +72,8 @@ class CPU {
 		unsigned short _ABY();
 		unsigned short _INX();
 		unsigned short _INY();
+
+		unsigned char Branch(bool condition);
 
 		unsigned char ADC_IM();
 		unsigned char ADC_ZP();

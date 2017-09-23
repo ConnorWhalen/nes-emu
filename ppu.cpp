@@ -148,7 +148,7 @@ void PPU::setReg(unsigned short address, unsigned char value){
 		sixteenMode = (value & 0x20);
 		backgroundPatternTableOffset = (value & 0x10);
 		spritePatternTableOffset = (value & 0x08);
-		vramIncrement32 = (value & 0x40);
+		vramIncrement32 = (value & 0x04);
 		tempVramAddr = (tempVramAddr & 0xf3ff) + ((value & 0x03) << 10);
 	} else if (address == 1){
 		PPUMASK = value;
@@ -157,8 +157,8 @@ void PPU::setReg(unsigned short address, unsigned char value){
 		redEmphasis = (value & 0x20);
 		showSprites = (value & 0x10);
 		showBackground = (value & 0x08);
-		showSpritesLeft8 = (value & 0x40);
-		showBackgroundLeft8 = (value & 0x20);
+		showSpritesLeft8 = (value & 0x04);
+		showBackgroundLeft8 = (value & 0x02);
 		greyscale = (value & 0x01);
 	} else if (address == 2){
 		PPUSTATUS = (value & 0x1f) + (PPUSTATUS & 0xe0);
@@ -277,8 +277,10 @@ void PPU::execute(){
 			// Draw Pixel
 			if (clockTick < 9 && clockTick > 0){
 				if (showBackground && showBackgroundLeft8 && showSprites && showSpritesLeft8){
-					if (spriteHere(clockTick-1) && (spritePriority(clockTick-1) || backgroundTransparent(clockTick-1))){
-						drawSprite(clockTick-1);
+					if (spriteHere(clockTick-1) && (!spritePriority(clockTick-1) || backgroundTransparent(clockTick-1))){
+						if (!drawSprite(clockTick-1)){
+							setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
+						}
 					} else{
 						setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
 					}
@@ -287,7 +289,9 @@ void PPU::execute(){
 					setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
 				} else if (!(showBackground && showBackgroundLeft8) && (showSprites && showSpritesLeft8)){
 					if (spriteHere(clockTick-1)){
-						drawSprite(clockTick-1);
+						if (!drawSprite(clockTick-1)){
+							setPixelTransparent(clockTick-1, scanline);
+						}
 					} else{
 						setPixelTransparent(clockTick-1, scanline);
 					}
@@ -296,8 +300,10 @@ void PPU::execute(){
 				}
 			} else if (clockTick < 257 && clockTick > 0){
 				if (showBackground && showSprites){
-					if (spriteHere(clockTick-1) && (spritePriority(clockTick-1) || backgroundTransparent(clockTick-1))){
-						drawSprite(clockTick-1);
+					if (spriteHere(clockTick-1) && (!spritePriority(clockTick-1) || backgroundTransparent(clockTick-1))){
+						if (!drawSprite(clockTick-1)){
+							setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
+						}
 					} else{
 						setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
 					}
@@ -306,7 +312,9 @@ void PPU::execute(){
 					setPixel(clockTick-1, scanline, currentTiles[((clockTick-1) % 8) + fineXScroll]);
 				} else if (!showBackground && showSprites){
 					if (spriteHere(clockTick-1)){
-						drawSprite(clockTick-1);
+						if (!drawSprite(clockTick-1)){
+							setPixelTransparent(clockTick-1, scanline);
+						}
 					} else{
 						setPixelTransparent(clockTick-1, scanline);
 					}
@@ -381,40 +389,36 @@ void PPU::fetchNextSprites(){
 	if (!sixteenMode){
 		for (int i = 0; i < spriteCount; i++){
 			unsigned char yOffset = scanline - currentSprites[i*4];
-			if ((currentSprites[i*4 + 2] & 0x80) == 0x80) yOffset = 0x0f - yOffset; // V flip
+			if ((currentSprites[i*4 + 2] & 0x80) == 0x80) yOffset = 0x07 - yOffset; // V flip
 			if (yOffset > 7) yOffset += 8;
 			unsigned short patternTableAddress = currentSprites[i*4 + 1] << 4;
 			if (spritePatternTableOffset) patternTableAddress += 0x1000;
 			spriteTiles[i*2] = ppuValueAt(patternTableAddress + yOffset);
 			spriteTiles[i*2 + 1] = ppuValueAt(patternTableAddress + yOffset + 8);
 			if ((currentSprites[i*4 + 2] & 0x40) == 0x40){ // H flip
-				for (int j = 0; j < 4; j++){
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xF0) >> 4 | (spriteTiles[i*2] & 0x0F) << 4;
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xCC) >> 2 | (spriteTiles[i*2] & 0x33) << 2;
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xAA) >> 1 | (spriteTiles[i*2] & 0x55) << 1;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xF0) >> 4 | (spriteTiles[i*2 + 1] & 0x0F) << 4;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xCC) >> 2 | (spriteTiles[i*2 + 1] & 0x33) << 2;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xAA) >> 1 | (spriteTiles[i*2 + 1] & 0x55) << 1;
-				}
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xF0) >> 4 | (spriteTiles[i*2] & 0x0F) << 4;
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xCC) >> 2 | (spriteTiles[i*2] & 0x33) << 2;
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xAA) >> 1 | (spriteTiles[i*2] & 0x55) << 1;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xF0) >> 4 | (spriteTiles[i*2 + 1] & 0x0F) << 4;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xCC) >> 2 | (spriteTiles[i*2 + 1] & 0x33) << 2;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xAA) >> 1 | (spriteTiles[i*2 + 1] & 0x55) << 1;
 			}
 		}
 	} else{
 		for (int i = 0; i < spriteCount; i++){
 			unsigned char yOffset = scanline - currentSprites[i*4];
-			if ((currentSprites[i*4 + 2] & 0x80) == 0x80) yOffset = 0x07 - yOffset; // V flip
+			if ((currentSprites[i*4 + 2] & 0x80) == 0x80) yOffset = 0x0f - yOffset; // V flip
 			unsigned short patternTableAddress = (currentSprites[i*4 + 1] & 0xfe) << 4;
 			if ((currentSprites[i*4 + 1] & 0x01) == 0x01) patternTableAddress += 0x1000;
 			spriteTiles[i*2] = ppuValueAt(patternTableAddress + yOffset);
 			spriteTiles[i*2 + 1] = ppuValueAt(patternTableAddress + yOffset + 8);
 			if ((currentSprites[i*4 + 2] & 0x40) == 0x40){ // H flip
-				for (int j = 0; j < 4; j++){
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xF0) >> 4 | (spriteTiles[i*2] & 0x0F) << 4;
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xCC) >> 2 | (spriteTiles[i*2] & 0x33) << 2;
-					spriteTiles[i*2] = (spriteTiles[i*2] & 0xAA) >> 1 | (spriteTiles[i*2] & 0x55) << 1;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xF0) >> 4 | (spriteTiles[i*2 + 1] & 0x0F) << 4;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xCC) >> 2 | (spriteTiles[i*2 + 1] & 0x33) << 2;
-					spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xAA) >> 1 | (spriteTiles[i*2 + 1] & 0x55) << 1;
-				}
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xF0) >> 4 | (spriteTiles[i*2] & 0x0F) << 4;
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xCC) >> 2 | (spriteTiles[i*2] & 0x33) << 2;
+				spriteTiles[i*2] = (spriteTiles[i*2] & 0xAA) >> 1 | (spriteTiles[i*2] & 0x55) << 1;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xF0) >> 4 | (spriteTiles[i*2 + 1] & 0x0F) << 4;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xCC) >> 2 | (spriteTiles[i*2 + 1] & 0x33) << 2;
+				spriteTiles[i*2 + 1] = (spriteTiles[i*2 + 1] & 0xAA) >> 1 | (spriteTiles[i*2 + 1] & 0x55) << 1;
 			}
 		}
 	}
@@ -429,7 +433,7 @@ void PPU::evaluateSprites(){
 	unsigned char height = sixteenMode ? 16 : 8;
 	while (primaryIndex <= 0xfc && secondaryIndex <= 8){
 		secondarySPRRAM[secondaryIndex*4] = SPRRAM[primaryIndex];
-		if (secondarySPRRAM[secondaryIndex*4] <= scanline && secondarySPRRAM[secondaryIndex*4] > scanline - 8){
+		if (secondarySPRRAM[secondaryIndex*4] <= scanline && secondarySPRRAM[secondaryIndex*4] > scanline - height){
 			if (primaryIndex == 0) hasSpriteZero = true;
 			secondarySPRRAM[secondaryIndex*4 + 1] = SPRRAM[primaryIndex + 1];
 			secondarySPRRAM[secondaryIndex*4 + 2] = SPRRAM[primaryIndex + 2];
@@ -441,7 +445,7 @@ void PPU::evaluateSprites(){
 	}
 	if (secondaryIndex == 8){
 		while (primaryIndex <= 0xfc){
-			if (SPRRAM[primaryIndex + subIndex] <= scanline && SPRRAM[primaryIndex + subIndex] > scanline - 8){
+			if (SPRRAM[primaryIndex + subIndex] <= scanline && SPRRAM[primaryIndex + subIndex] > scanline - height){
 				PPUCTRL |= 0x20; // sprite overflow
 				break;
 			}
@@ -474,7 +478,7 @@ bool PPU::backgroundTransparent(unsigned char x){
 	return (currentTiles[((clockTick-1) % 8) + fineXScroll] % 4 == 0);
 }
 
-void PPU::drawSprite(unsigned char x){
+bool PPU::drawSprite(unsigned char x){
 	unsigned char tile0 = 0;
 	unsigned char tile1 = 0;
 	unsigned char attribute = 0;
@@ -483,7 +487,7 @@ void PPU::drawSprite(unsigned char x){
 		if (currentSprites[i*4 + 3] <= x && currentSprites[i*4 + 3] > x - 8){
 			tile0 = spriteTiles[i*2];
 			tile1 = spriteTiles[i*2 + 1];
-			attribute = currentSprites[i*4 + 2] * 0x03;
+			attribute = currentSprites[i*4 + 2] & 0x03;
 			xOffset = x - currentSprites[i*4 + 3];
 			break;
 		}
@@ -492,7 +496,11 @@ void PPU::drawSprite(unsigned char x){
 	if (xOffset < 7) colourAddress += (tile1 >> (6 - xOffset)) & 0x02;
 	else colourAddress += (tile1 << 1) & 0x02; // shifting by a negative number results in undefined behaviour
 	colourAddress += attribute << 2;
-	setPixel(x, scanline, colourAddress);
+	if (colourAddress % 4 == 0) return false;
+	else{
+		setPixel(x, scanline, colourAddress | 0x10);
+		return true;
+	}
 }
 
 void PPU::spriteZero(){

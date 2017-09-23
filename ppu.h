@@ -89,7 +89,7 @@ class PPU {
 		bool spriteHere(unsigned char x);
 		bool spritePriority(unsigned char x);
 		bool backgroundTransparent(unsigned char x);
-		void drawSprite(unsigned char x);
+		bool drawSprite(unsigned char x);
 		void spriteZero();
 		unsigned char nameTableValueAt(unsigned short address);
 		void setNameTableValueAt(unsigned short address, unsigned char value);

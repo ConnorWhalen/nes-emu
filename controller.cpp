@@ -35,6 +35,7 @@ unsigned char Controller::read(){
 		case 7: ret = right ? 0x41 : 0x40;
 				break;
 		case 19: ret = player1 ? 0x40 : 0x41;
+				break;
 		case 20: ret = player1 ? 0x41 : 0x40;
 				break;
 		default: ret = 0x40;
