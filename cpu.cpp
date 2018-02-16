@@ -107,7 +107,7 @@ void CPU::nmi(){
 
 void CPU::irq(){
 	if ((P & interruptDisableMask) != interruptDisableMask){
-		std::cout<< "Starting IRQ\n";
+		// std::cout<< "Starting IRQ\n";
 		setValueAt(0x100 + SP--, (PC & 0xff00) >> 8);
 		setValueAt(0x100 + SP--, (PC & 0x00ff));
 		setValueAt(0x100 + SP--, P);

@@ -10,91 +10,20 @@
 class CPU;
 
 typedef struct{
-	bool* pulse1Duty;
-	bool pulse1Halt;
-	bool pulse1Envelope;
-	unsigned char pulse1EnvelopePeriod;
-	bool pulse1Sweep;
-	unsigned char pulse1SweepPeriod;
-	bool pulse1SweepNegative;
-	unsigned char pulse1SweepShift;
-	unsigned short pulse1Timer;
-	unsigned char pulse1Length;
-
-	unsigned short pulse1CurrentTimer;
-	unsigned short pulse1CalculatedTimer;
-	unsigned char pulse1Phase;
-	bool pulse1SweepMute;
-	bool pulse1StartFlag;
-	bool pulse1SweepReload;
-	unsigned char pulse1DecayCounter;
-	unsigned char pulse1EnvelopeCurrentPeriod;
-	unsigned char pulse1SweepCurrentPeriod;
-
-	bool* pulse2Duty;
-	bool pulse2Halt;
-	bool pulse2Envelope;
-	unsigned char pulse2EnvelopePeriod;
-	bool pulse2Sweep;
-	unsigned char pulse2SweepPeriod;
-	bool pulse2SweepNegative;
-	unsigned char pulse2SweepShift;
-	unsigned short pulse2Timer;
-	unsigned char pulse2Length;
-
-	unsigned short pulse2CurrentTimer;
-	unsigned short pulse2CalculatedTimer;
-	unsigned char pulse2Phase;
-	bool pulse2SweepMute;
-	bool pulse2StartFlag;
-	bool pulse2SweepReload;
-	unsigned char pulse2DecayCounter;
-	unsigned char pulse2EnvelopeCurrentPeriod;
-	unsigned char pulse2SweepCurrentPeriod;
-
-	bool triangleHalt;
-	unsigned short triangleFrameCount;
-	unsigned short triangleTimer;
-	unsigned char triangleLength;
-
-	bool noiseHalt;
-	bool noiseEnvelope;
-	unsigned char noiseEnvelopePeriod;
-	bool noiseLoop;
-	unsigned char noisePeriod;
-	unsigned char noiseLength;
-
-	bool deltaInterrupt;
-	bool deltaLoop;
-	unsigned char deltaFrequency;
-	unsigned char deltaDirect;
-	unsigned char deltaAddress;
-	unsigned char deltaLength;
-
-	bool pulse1Enable;
-	bool pulse2Enable;
-	bool triangleEnable;
-	bool noiseEnable;
-	bool deltaEnable;
-	bool frameSequence;
-	bool frameInterrupt;
-
-	unsigned char frameCount;
-
-	CPU* cpu;
 } AudioData;
-
-void calculatePulse1Period(AudioData* audioData);
-void updatePulse1Sweep(AudioData* audioData);
-void calculatePulse1Envelope(AudioData* audioData);
-void calculatePulse2Period(AudioData* audioData);
-void updatePulse2Sweep(AudioData* audioData);
-void calculatePulse2Envelope(AudioData* audioData);
 
 class Audio{
 	public:
 		Audio();
+		void execute();
 		void stopStream();
+
+		void calculatePulse1Period();
+		void updatePulse1Sweep();
+		void calculatePulse1Envelope();
+		void calculatePulse2Period();
+		void updatePulse2Sweep();
+		void calculatePulse2Envelope();
 
 		void setPulse1Duty(unsigned char duty);
 		void setPulse1Halt(bool halt);
@@ -158,7 +87,81 @@ class Audio{
 		unsigned char getLength(unsigned char index);
 		PaStreamParameters* outputParams;
 		PaStream* outputStream;
-		AudioData* audioData;
+
+		std::iostream* inputStream;
+
+		bool* pulse1Duty;
+		bool pulse1Halt;
+		bool pulse1Envelope;
+		unsigned char pulse1EnvelopePeriod;
+		bool pulse1Sweep;
+		unsigned char pulse1SweepPeriod;
+		bool pulse1SweepNegative;
+		unsigned char pulse1SweepShift;
+		unsigned short pulse1Timer;
+		unsigned char pulse1Length;
+
+		unsigned short pulse1CurrentTimer;
+		unsigned short pulse1CalculatedTimer;
+		unsigned char pulse1Phase;
+		bool pulse1SweepMute;
+		bool pulse1StartFlag;
+		bool pulse1SweepReload;
+		unsigned char pulse1DecayCounter;
+		unsigned char pulse1EnvelopeCurrentPeriod;
+		unsigned char pulse1SweepCurrentPeriod;
+
+		bool* pulse2Duty;
+		bool pulse2Halt;
+		bool pulse2Envelope;
+		unsigned char pulse2EnvelopePeriod;
+		bool pulse2Sweep;
+		unsigned char pulse2SweepPeriod;
+		bool pulse2SweepNegative;
+		unsigned char pulse2SweepShift;
+		unsigned short pulse2Timer;
+		unsigned char pulse2Length;
+
+		unsigned short pulse2CurrentTimer;
+		unsigned short pulse2CalculatedTimer;
+		unsigned char pulse2Phase;
+		bool pulse2SweepMute;
+		bool pulse2StartFlag;
+		bool pulse2SweepReload;
+		unsigned char pulse2DecayCounter;
+		unsigned char pulse2EnvelopeCurrentPeriod;
+		unsigned char pulse2SweepCurrentPeriod;
+
+		bool triangleHalt;
+		unsigned short triangleFrameCount;
+		unsigned short triangleTimer;
+		unsigned char triangleLength;
+
+		bool noiseHalt;
+		bool noiseEnvelope;
+		unsigned char noiseEnvelopePeriod;
+		bool noiseLoop;
+		unsigned char noisePeriod;
+		unsigned char noiseLength;
+
+		bool deltaInterrupt;
+		bool deltaLoop;
+		unsigned char deltaFrequency;
+		unsigned char deltaDirect;
+		unsigned char deltaAddress;
+		unsigned char deltaLength;
+
+		bool pulse1Enable;
+		bool pulse2Enable;
+		bool triangleEnable;
+		bool noiseEnable;
+		bool deltaEnable;
+		bool frameSequence;
+		bool frameInterrupt;
+
+		unsigned char frameCount;
+
+		CPU* cpu;
 };
 
 #endif

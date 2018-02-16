@@ -351,7 +351,8 @@ void PPU::fetchNextTile(){
 	unsigned char patternTableLoFetch = ppuValueAt(patternTableAddress);
 	unsigned char patternTableHiFetch = ppuValueAt(patternTableAddress + 0x0008);
 	for (int i = 0; i < 7; i++) currentTiles[i + 16] = ((patternTableLoFetch >> (7-i)) & 0x1) + ((patternTableHiFetch >> (6-i)) & 0x2);
-	currentTiles[23] = (patternTableLoFetch & 0x1) + ((patternTableHiFetch << 1) & 0x2); // shifting by a negative number results in undefined behaviour
+	// shifting by a negative number results in undefined behaviour
+	currentTiles[23] = (patternTableLoFetch & 0x1) + ((patternTableHiFetch << 1) & 0x2);
 	unsigned char attributeBitShift = 0;
 	if ((vramAddr & 0x0002) == 0x0002) attributeBitShift += 2;
 	if ((vramAddr & 0x0040) == 0x0040) attributeBitShift += 4;
@@ -489,28 +490,28 @@ bool PPU::drawSprite(unsigned char x){
 			tile1 = spriteTiles[i*2 + 1];
 			attribute = currentSprites[i*4 + 2] & 0x03;
 			xOffset = x - currentSprites[i*4 + 3];
-			break;
+
+			unsigned char colourAddress = (tile0 >> (7 - xOffset)) & 0x01;
+			if (xOffset < 7) colourAddress += (tile1 >> (6 - xOffset)) & 0x02;
+			else colourAddress += (tile1 << 1) & 0x02; // shifting by a negative number results in undefined behaviour
+			colourAddress += attribute << 2;
+			if (colourAddress % 4 != 0){
+				setPixel(x, scanline, colourAddress | 0x10);
+				return true;
+			}
 		}
 	}
-	unsigned char colourAddress = (tile0 >> (7 - xOffset)) & 0x01;
-	if (xOffset < 7) colourAddress += (tile1 >> (6 - xOffset)) & 0x02;
-	else colourAddress += (tile1 << 1) & 0x02; // shifting by a negative number results in undefined behaviour
-	colourAddress += attribute << 2;
-	if (colourAddress % 4 == 0) return false;
-	else{
-		setPixel(x, scanline, colourAddress | 0x10);
-		return true;
-	}
+	return false;
 }
 
 void PPU::spriteZero(){
-	if (hasSpriteZero && currentTiles[2] <= clockTick-1 && currentTiles[2] > clockTick-9){
-		unsigned char xOffset = clockTick-1 - currentTiles[2];
+	if (hasSpriteZero && currentSprites[3] <= clockTick-1 && currentSprites[3] > clockTick-9){
+		unsigned char xOffset = clockTick-1 - currentSprites[3];
 		unsigned char colourAddress = (spriteTiles[0] >> (7 - xOffset)) & 0x01;
 		if (xOffset < 7) colourAddress += (spriteTiles[1] >> (6 - xOffset)) & 0x02;
 		else colourAddress += (spriteTiles[1] << 1) & 0x02; // shifting by a negative number results in undefined behaviour
 
-		if (!backgroundTransparent(clockTick-1) && colourAddress == 0) PPUSTATUS |= 0x40;
+		if (!backgroundTransparent(clockTick-1) && colourAddress != 0) PPUSTATUS |= 0x40;
 	}
 }
 
